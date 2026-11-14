@@ -73,6 +73,8 @@ function Editor() {
   const [selectedId, setSelectedId] = useState<string | null>(draft.plan.tasks[0].id);
   const [notice, setNotice] = useState('');
   const [dirty, setDirty] = useState(false);
+  const goalDialog = useRef<HTMLDialogElement>(null);
+  const goalInput = useRef<HTMLTextAreaElement>(null);
   const clickStart = useRef<OnConnectStartParams | null>(null);
   useEffect(() => {
     if (!dirty) return;
@@ -153,6 +155,7 @@ function Editor() {
       requestAnimationFrame(() => void fitView({ padding: 0.24, duration: 200, maxZoom: 1 }));
     }
     setNotice('当前画布已显示 TEST 示例计划。');
+    goalDialog.current?.close();
   }
 
   function addTask() {
@@ -186,25 +189,40 @@ function Editor() {
     <main>
       <section className="project">
         <h1>编排工作台</h1>
-        <span className="draft-state"><i />{dirty ? '有未保存的修改' : '本地草稿'}</span>
+        <div className="project-actions">
+          <span className="draft-state"><i />{dirty ? '未保存' : '本地草稿'}</span>
+          <button type="button" className="secondary" aria-haspopup="dialog"
+            onClick={() => {
+              goalDialog.current?.showModal();
+              goalInput.current?.focus();
+            }}>项目需求</button>
+        </div>
       </section>
+      <dialog ref={goalDialog} className="goal-dialog" aria-labelledby="goal-title">
       <form className="goal-form" onSubmit={(event) => {
         event.preventDefault();
         loadExample();
       }}>
-        <label htmlFor="goal">项目需求</label>
-        <textarea id="goal" rows={1} maxLength={GOAL_LIMIT} value={goal}
-          aria-description="加载时使用固定的 TEST 示例。需求可随草稿保存。"
+        <header className="goal-header">
+          <h2 id="goal-title">项目需求</h2>
+          <button type="button" className="close-dialog" aria-label="关闭项目需求"
+            onClick={() => goalDialog.current?.close()}>×</button>
+        </header>
+        <textarea ref={goalInput} id="goal" aria-label="需求描述" rows={5} maxLength={GOAL_LIMIT} value={goal}
+          aria-describedby="goal-mode"
           placeholder="描述项目目标与验收要求"
           onChange={(event) => editGoal(event.target.value)} />
         <div className="goal-actions">
+          <span id="goal-mode">TEST 模式 · 固定示例</span>
           <button type="button" className="text-button" disabled={goal === EXAMPLE_GOAL} onClick={() => {
             if (goal.trim() && !window.confirm('用示例需求替换当前填写的内容？')) return;
             editGoal(EXAMPLE_GOAL);
           }}>填入示例</button>
+          <button type="button" className="secondary" onClick={() => goalDialog.current?.close()}>返回画布</button>
           <button className="primary" type="submit" disabled={!goal.trim()}>加载示例计划</button>
         </div>
       </form>
+      </dialog>
       <div className="editor">
         <aside className="tasks" aria-label="任务列表">
           <div className="panel-heading"><h2>任务列表</h2><span>{plan.tasks.length}</span></div>
