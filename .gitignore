@@ -1,0 +1,12 @@
+# Local document export
+/docs.rar
+
+# Local runtime data and secrets
+/.flowstudio/
+.env
+.env.*
+!.env.example
+.venv/
+node_modules/
+__pycache__/
+*.pyc
