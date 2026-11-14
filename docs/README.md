@@ -1,6 +1,17 @@
-# FlowStudio 设计文档 v2
+# FlowStudio 设计文档 v3
 
-当前版本仅研究与设计，应用尚未实现。旧规则工作流设计移至[历史归档](archive/workflow-v1/BASELINE.md)，不再适用于本项目。
+主分支已包含前端画布和 TEST 草稿编辑。完整产品设计与首版交付范围分别记录。旧规则工作流设计移至[历史归档](archive/workflow-v1/BASELINE.md)。
+
+- [现状差异与迁移](PROJECT_AUDIT.md)
+- [产品定位](product/PRODUCT_POSITIONING.md)
+- [需求规格](product/REQUIREMENTS.md)
+- [首版范围](product/MVP_SCOPE.md)
+- [智能任务分解](architecture/TASK_DECOMPOSITION.md)
+- [工作流数据与 API](architecture/WORKFLOW_DATA_MODEL.md)
+- [技术选型](architecture/TECH_STACK.md)
+- [运行可视化](design/EXECUTION_VISUALIZATION.md)
+- [Windows 本地部署](development/LOCAL_DEPLOYMENT.md)
+- [团队分工](development/TEAM_ASSIGNMENTS.md)
 
 - [BASELINE.md](BASELINE.md)
 - [research/REFERENCE_PROJECTS.md](research/REFERENCE_PROJECTS.md)

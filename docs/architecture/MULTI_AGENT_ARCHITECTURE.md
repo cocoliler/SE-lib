@@ -1,16 +1,31 @@
-# 多 Agent 体系
-| 角色 | 输入 | 输出/验收 | 能力边界 |
+# 多 Agent 角色与协作
+
+| 内置角色 | 输入和上下文 | 成果 Schema | 工具 |
 |---|---|---|---|
-| Planner | goal/spec/constraints/可用角色 | PlanRevision；Schema+DAG+预算合法 | 不执行任务 |
-| Coordinator | ready任务/角色能力/摘要 | assignment或handoff/replan建议 | 编排器验证后生效 |
-| Research | 需求/允许来源 | sources[{url,title,evidence}],options | 未配置联网只能输入资料分析 |
-| Executor | TaskSpec+输入artifact | output_schema对应结果 | 工具白名单、迭代和超时 |
-| Reviewer | 标准/成果/机器验证报告 | verdict:pass/revise/fail，findings[{criterion_id,severity,evidence_ref,suggestion}] | 不能推翻机器失败 |
-| Architecture | 技术选项/criteria | modules/interfaces/decisions | 自定义Executor角色 |
-| Planning/TestDesign | 架构/criteria | tasks或cases/coverage | 自定义Executor角色 |
+| Planner | 固定规格、能力目录、计划约束 | PlanRevision 候选 | 无 |
+| Research | 规格、明确授权的项目材料 | constraints、assumptions、findings、source_refs | 允许的本地材料只读 |
+| Architect | Research artifact、规格 | modules、schema、api、decisions | JSON 校验 |
+| Planning | 架构与规格 | development_tasks、dependencies、criterion_refs | JSON 校验 |
+| TestDesign | 架构与规格 | cases、criterion_refs、expected_results | JSON 校验 |
+| Reviewer | 规格、各成果和机器检查 | verdict、findings、evidence_refs | JSON 校验 |
 
-AgentVersion字段：agent_id/version/name/role/description/system_prompt/model_profile_version/parameters/tool_permissions/input_schema/output_schema/max_steps/context_policy/created_at。保存产生不可变版本，run固定引用；编辑不影响历史，停用阻止新引用。注册校验工具存在、模型能力支持、schema合法、max_steps不超run限制；复用通过模板复制并生成新身份。
+AgentRegistry 用角色 ID 与版本注册预设，配置独立 system_prompt、model_profile_ref、input_schema、output_schema、allowed_tools、max_steps 和上下文预算。运行冻结配置，不含 API Key。多个角色可共享 DeepSeek 连接。Agent 仅见当前任务、设计规格必要片段和绑定成果。工具输出按不可信输入处理，不能更改提示权限。没有检索工具时 Research 标明材料来源与未验证假设。
 
-每个Agent循环：构造有限上下文→模型决策→若tool_call则校验权限/参数/预算→调用并记录→返回观察→下一轮；遇到结构化final则校验输出。达到步数或时间失败，不能用无界递归。内部推理过程不作为监控承诺，只展示输入摘要、模型可见输出、工具与决策证据。
+Planner 提出分工，编排器核对角色能力后派发。专职 Supervisor 和 Writer 无首版必要。交接时由编排器接受生产成果，验证引用并向接收角色发任务委派，接收方的 Attempt 清单证明实际消费；当期不实现任意控制权转移。Reviewer 的缺陷交回对应角色，批准后才运行。消息、依赖、成果、工具操作及状态事件分开记录，见[通信协议](AGENT_COMMUNICATION.md)。
 
-上下文由系统规则、当前任务、验收标准、依赖artifact引用和必要摘要组成；不拼接全部历史。默认输入预算为模型context上限扣除输出预留后的70%，超限优先按字段裁剪可选上下文，必要数据不能静默截断；摘要附原文hash与引用。检索/提示注入不能变更system权限。Reviewer与生产者使用不同角色上下文；同一模型可用但不等于独立质量保证。
+```mermaid
+sequenceDiagram
+ participant P as Planner
+ participant O as Orchestrator
+ participant R as Research
+ participant A as Architect
+ participant U as Reviewer
+ P->>O: 候选图与角色建议
+ O->>R: 委派已确认任务
+ R->>O: 产物引用与证据
+ O->>A: 委派与已解析的上游字段
+ A->>O: 架构和接口成果
+ O->>U: 规格、机器报告及成果
+ U->>O: 缺陷与建议
+ Note over O,A: 用户批准后定向修订
+```

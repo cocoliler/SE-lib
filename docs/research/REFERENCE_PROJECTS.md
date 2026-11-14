@@ -1,4 +1,15 @@
 # 参考项目研究与选型
+
+## 本轮复核与采用边界
+
+- Dify 的[画布源码](https://github.com/langgenius/dify/blob/main/web/app/components/workflow/index.tsx)和[运行历史](https://docs.dify.ai/en/use-dify/debug/history-and-logs)支持从图到节点调试的布局思路。FlowStudio 保留按需详情与运行证据。
+- n8n 官方[执行分类](https://docs.n8n.io/workflows/executions/)区分不同执行入口。FlowStudio 让草稿、快照与运行历史可辨认。
+- Flowise [Agentflow V2](https://docs.flowiseai.com/using-flowise/agentflowv2)体现工具授权及人工节点。FlowStudio 首版权限固定，等待点与实际业务审批绑定。
+- LangGraph [Send](https://docs.langchain.com/oss/python/langgraph/graph-api#send)支持逐任务并行参数和 reducer。[Interrupt](https://docs.langchain.com/oss/python/langgraph/interrupts)恢复会重新进入节点。固定主图选型及启动恢复限制据此落在编排与状态文档。
+- CrewAI [Tasks](https://docs.crewai.com/en/concepts/tasks)提供输出 guardrail 与有界重试。FlowStudio 采用确定性检查与模型审查分层。
+- React Flow [自定义节点](https://reactflow.dev/learn/customization/custom-nodes)支持布局和展示组件。业务图与前端布局隔离。
+
+以下为 v2 研究及历史取舍。交付范围与运行承诺以新版[基线](../BASELINE.md)为准。
 研究日期2026-11-14。实际访问下列官方文档与仓库页面；未安装运行参考项目、未逐行审计内部源码、未固定提交版本。以下“确认”限于公开接口和文档，所有本项目适配策略是设计建议。实施前锁定兼容依赖并做Windows实验。
 
 | 项目 | 已确认设计及来源 | FlowStudio采用的建议与边界 |

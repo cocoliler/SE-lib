@@ -1,31 +1,25 @@
-# 状态与持久化
+# 执行状态与恢复边界
+
 ```mermaid
 stateDiagram-v2
- [*] --> CREATED
- CREATED --> PLANNING
- PLANNING --> READY: 合法计划
- READY --> WAITING_HUMAN: 等待批准
- WAITING_HUMAN --> RUNNING: 审批通过
- RUNNING --> REVIEWING: 机器验证完成
- REVIEWING --> COMPLETED: 通过
- REVIEWING --> REVISING: 缺陷可修订
- REVISING --> WAITING_HUMAN: 修订待批
- RUNNING --> WAITING_HUMAN: 工具审批或恢复确认
- RUNNING --> FAILED: 不可恢复错误
- PLANNING --> FAILED: 无合法计划
- REVIEWING --> FAILED: 审查失败或超限
+ [*] --> RUNNING: 已批准计划
+ RUNNING --> WAITING_HUMAN: 安全审批点
+ WAITING_HUMAN --> RUNNING: 批准
+ RUNNING --> REVIEWING: 成果已汇聚
+ REVIEWING --> COMPLETED: 程序与审查通过
+ REVIEWING --> WAITING_HUMAN: 定向修订待批准
+ RUNNING --> FAILED: 执行失败
+ REVIEWING --> FAILED: 不合格或预算耗尽
  WAITING_HUMAN --> FAILED: 拒绝或过期
- REVISING --> FAILED: 修订无效
- CREATED --> CANCELED
+ RUNNING --> CANCELED: 用户取消
 ```
-取消适用于全部非终态；图只画一次代表边，状态表以此规则为准。所有终态不可恢复为活动态，重跑新建run。Run只有无活动工作且确需人工时WAITING_HUMAN，局部任务审批不阻塞其他可执行分支。手动计划CREATED→READY。
 
-TaskRun：PENDING→READY→RUNNING→COMPLETED；输出待审可经REVIEWING；审批进入WAITING_HUMAN；失败FAILED、依赖失败BLOCKED、条件未激活SKIPPED、用户取消CANCELED、崩溃中在途结果未知INTERRUPTED。重试创建新Attempt，历史不改；TaskRun的当前attempt指针迁移需CAS。
+候选计划 PLANNING/READY/FAILED 由规划端维护。执行前的确认与创建 run 是一个事务。RUNNING、REVIEWING、WAITING_HUMAN 都可接受取消。任一活动状态遭遇无法恢复的进程终止，可转 FAILED 并记录 PROCESS_INTERRUPTED。修订批准使 Run 回到 RUNNING，修订轨迹通过 revision 与事件表示。终态不可覆盖，重新运行创建新 run。
 
-暂停提交scheduling_paused=true后禁止claim，已经执行的模型/工具继续直到边界；UI显示“停止新调度，在途N”。恢复清标志，仍需校验审批和预算；不是冻结网络请求。取消先generation++与cancel_requested，停止调度并尝试取消I/O，最长5秒收敛CANCELED；已发生副作用不会撤销，迟到结果单独记录。
+TaskRun 为 PENDING → READY → RUNNING → COMPLETED。人工任务经 WAITING_HUMAN。失败 FAILED，下游 BLOCKED，取消 CANCELED，进程中断的在途任务 INTERRUPTED。临时错误重试创建新的 Attempt，不覆盖历史。审批等待仅在在途任务收敛后进入 WAITING_HUMAN。人工作出决定时检查目标 hash、期限和当前状态，重复命令返回原结果。
 
-业务库是用户可见状态、事件与结果事实源；checkpoint是LangGraph控制位置、线程状态和恢复游标。两库不存在原子事务。每个节点效果使用稳定operation_key(run/task/attempt/step)，先查业务结果；已提交则复用，未提交才执行。图推进但业务未确认不允许下一业务步骤；节点返回前必须提交业务事务。checkpoint落后导致重入时复用已提交结果；checkpoint损坏或图版本不兼容暂停恢复，不能猜测执行位置。
+取消先更新 generation 并停止领取，在途 I/O 尝试取消，最多 5 秒后收敛业务状态。晚到回调不得写成功，取消不能撤回已发送的请求或已产生的费用。状态、成果、审批和持久事件同事务。首版异常退出后将未结束 run 设为 FAILED，待决审批失效、已落库成果保留。下一次执行重新确认，P0 禁止自动重发结果未知的外部操作。
 
-启动取得单实例锁→检查版本/数据库→扫描在途Attempt→标INTERRUPTED→对账checkpoint与operation记录。纯计算/已持久化结果可自动复用；模型请求无结果可能重复收费，进入WAITING_HUMAN确认重试；副作用结果未知需人工核实，不自动重发；待审批记录跨重启保留有效，检查hash/期限后用相同thread_id和Command(resume=decision)。中断节点重入前的逻辑必须幂等，interrupt前不放非幂等副作用。
+跨重启的 LangGraph SQLite checkpoint 是 P1。业务记录是 UI 事实源。接入时用稳定 thread_id、graph_version 与 operation_key 对账，checkpoint 落后则复用已提交的结果。两库不可假定原子提交，版本不兼容或结果未知需人工处理。
 
-SSE id为run_id:seq，业务状态与event在同事务递增seq。客户端先读取snapshot和snapshot_seq，再从该序号补事件；收到重复去重，发现缺口重新抓snapshot。Last-Event-ID支持断线续传，游标早于保留窗口返回reset事件与快照地址；流心跳15秒，慢客户端断开后补发，不阻塞调度。事件从DB分页读取，内存通知仅唤醒；连接断开不取消任务。
+SSE 的 id 使用 run_id:seq。快照包含 snapshot_seq，接着补发其后的事件，再监听实时新事件。重复按 run_id:seq 去重，发现缺口重取快照。保留期外返回 reset，客户端刷新。心跳 15 秒，慢连接关闭可重连。断线不影响执行。

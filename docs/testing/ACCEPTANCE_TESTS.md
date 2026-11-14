@@ -1,28 +1,39 @@
-# 功能验收
-所有项目当前状态：NOT_RUN。本文件是测试规范，不是通过报告。REAL门槛需配置DeepSeek Key并允许实际费用，在实施阶段执行；TEST通过不能替代REAL。
+# 设计验证与测试规范
 
-| ID | Given/When | 必须观察到的结果/证据 |
+执行状态 NOT_RUN。此前 CLI 与画布单独验证不代表网页或 REAL 闭环通过。
+
+## 学生选课管理系统
+
+使用[学生选课规格 JSON](fixtures/course-selection.spec.json)。这是创建规格的请求样例，revision、ID 和时间由后端生成。完成条件要求 C1–C5 都有对应设计和测试。后续实现按此输入固定复现。
+
+```mermaid
+flowchart LR
+ S[选课规格] --> P[Planner]
+ P --> H[人工确认计划]
+ H --> R[Research 需求与约束]
+ R --> A[Architect 模块数据库与API]
+ A --> D[Planning 开发任务]
+ A --> T[TestDesign 测试矩阵]
+ D --> V[机器校验与 Reviewer]
+ T --> V
+ V -->|通过| F[成果与验证报告]
+ V -->|缺陷与证据| X[批准一次定向修订]
+ X --> N[新版本修正与复审]
+```
+
+示例拓扑供 TEST 固定复现，REAL 允许合法等价拆分。Architect 读取 Research 的 constraints，两个独立角色实际读取同一个 Architecture 产物，输入清单记录 hash 和 JSON Pointer，Reviewer 读取汇聚后的全部成果。修订场景通过 TEST 注入漏掉 C2 的测试矩阵，同时把机器检查报告交给 Reviewer。期望指出 C2 缺陷、负责任务和证据，批准后只重做 TestDesign 与受影响的复审。REAL 可受控注入同样缺陷，证据标记测试干预。
+
+| 用例 | 自动或人工 | 通过条件 |
 |---|---|---|
-| A01 规划 | 输入演示规格并调用真实Planner | 非硬编码JSON、合法图、模型call记录与usage |
-| A02 非法图 | 注入重复ID/环/缺角色/越权工具 | 422字段定位；修复最多2次后终止 |
-| A03 编辑审批 | AI计划人工改后批准，另标签页旧版本提交 | 只运行批准hash；旧revision 409 |
-| A04 并行 | 两个独立研究任务延迟不同 | 时间区间重叠，最大并发不超2，汇聚输入hash正确 |
-| A05 交接 | Research提出Architecture handoff | request/accepted/ack；active_agent改变；后续模型实际消费同artifact |
-| A06 机器验证 | 缺少必需interface或criterion覆盖 | 验证失败不能被Reviewer pass覆盖 |
-| A07 审查 | 注入漏测状态流转的成果 | Reviewer结构化revise；批准后新增任务版本与重审，保留旧成果 |
-| A08 终止 | Reviewer持续不通过/工具反复失败 | 修订、步数、调用、token任一上限触发，不能无限循环 |
-| A09 暂停取消 | 在途模型请求时pause/cancel | pause阻止新claim，在途继续；cancel晚到结果不改终态 |
-| A10 断线 | 断SSE后状态继续变化再重连 | 无漏事件，重复去重，过期游标重取快照 |
-| A11 恢复 | 在业务提交后checkpoint前杀进程 | 已落库结果复用；不重复副作用；未知模型请求人工确认 |
-| A12 审批恢复 | interrupt后重启并重复批准 | 同thread继续且仅一次消费决定；过期/hash不符拒绝 |
-| A13 工具 | 越界文件、链接、私网跳转、未批准写操作 | 权限网关阻止并记录脱敏错误 |
-| A14 模型失败 | 429/超时/坏JSON/不支持参数 | 有限重试；未知usage不计零；错误可定位 |
-| A15 测试模式 | 无Key运行TEST | 固定种子可复现、全程TEST标识、不得显示REAL通过 |
-| A16 UI | 100节点编辑分组布局撤销与历史查看 | 视图不改变业务图，达性能目标或报告差距 |
-| A17 Windows | 全新支持环境按脚本启动 | 无Docker等服务，端口冲突/退出/备份恢复清楚 |
-| A18 持久性 | 磁盘满/业务事务失败/不兼容图版本 | 停止派发，不显示未提交成功，不猜测续跑 |
+| V01 规格与规划 | 单元+集成 | 拒绝缺字段、无效角色、不兼容绑定、自环、环和缺失引用；AI 格式修复最多两次 |
+| V02 确认并运行 | 集成+浏览器 | 未批准不派发，旧版本 409，重复确认只建一条 run。编辑草稿不改变运行图 |
+| V03 真实传递 | 集成+REAL | 至少三种独立职责的真实请求记录。下游输入含实际产物字段。改变约束，核查对应设计与测试变化 |
+| V04 并行汇聚 | 集成+人工 | 两个分支调用时间重叠，任一未完成时不启动依赖双方的审查，并发不超过 2 |
+| V05 失败与取消 | 集成 | 失败下游 BLOCKED，超额度终止。取消停止领取，晚到结果不改变终态 |
+| V06 人工节点 | 集成+浏览器 | 审批等待无在途任务，只接受匹配 hash 的一次决定，拒绝或到期落终态 |
+| V07 验证与修订 | 集成+REAL | 找出 C2 缺失，程序失败不可被模型 pass 覆盖。批准后新增 revision，保留历史。二次失败终止 |
+| V08 事件一致性 | 浏览器 | 断线后补发去重，执行视图与 GET 快照一致，可查输入、输出、耗时、状态和原因 |
+| V09 持久化 | 集成+Windows | 中途关闭后端再启动，旧 run 标中断且保留成果，查看历史不发模型请求 |
+| V10 真实交付 | 人工+Windows | 真实 API 证据、设计成果及 C1–C5 的覆盖表可审阅。验证日志脱敏 |
 
-## REAL证据协议
-固定输入fixture及hash；保存脱敏模型profile/模型名/依赖锁/Agent与计划版本；记录每个模型请求时间、provider_request_id（若提供）、usage或unknown、输入artifact hash、输出hash；执行Planner/Research/Architecture/Planning/TestDesign/Reviewer真实调用。断言前后产物被实际消费，改变输入需求应引起相关下游输出变化。保留一次正常通过、一次人工植入缺陷的修订分支；植入需明确标记为测试干预，不能伪称模型自然犯错。
-
-导出manifest、plan.json、events.jsonl、artifacts、review.json、测试结果与运行截图；禁止导出Key或敏感原始提示。真实输出不做全文快照断言，使用schema、引用完整性、criteria覆盖及人工质量评审。第三方调用可核对请求记录，UI动画不是证据。
+实施时将规格、正常计划、缺陷产物和响应夹具提交至 tests/fixtures。计划命令为 `python -m pytest tests/unit tests/integration`、前端构建与 `npx playwright test`，最终命令由 Phase 8 记录。REAL 独立运行，Key 通过环境变量配置。每次报告保存 commit、环境与依赖版本、模式、fixture hash、plan revision、请求 ID、输入及输出 hash、事件、产物、缺陷与最终判定。模型输出按 Schema 与验收覆盖验证，无需逐字相同。
