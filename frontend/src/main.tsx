@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   Background, Controls, Handle, MarkerType, MiniMap, Position, ReactFlow,
   ReactFlowProvider, useNodesState, useReactFlow, type Edge, type Node, type NodeProps,
+  type OnConnectEnd, type OnConnectStartParams,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { canLink, examplePlan, type Plan, type Task } from './plan';
+import { linkError, examplePlan, type Plan, type Task } from './plan';
 import './style.css';
 
 type TaskNode = Node<{ title: string; index: number }, 'task'>;
@@ -68,6 +69,16 @@ function Editor() {
   const [selectedId, setSelectedId] = useState<string | null>(draft.plan.tasks[0].id);
   const [notice, setNotice] = useState('');
   const [dirty, setDirty] = useState(false);
+  const clickStart = useRef<OnConnectStartParams | null>(null);
+  useEffect(() => {
+    if (!dirty) return;
+    function confirmLeaving(event: BeforeUnloadEvent) {
+      event.preventDefault();
+      event.returnValue = true;
+    }
+    window.addEventListener('beforeunload', confirmLeaving);
+    return () => window.removeEventListener('beforeunload', confirmLeaving);
+  }, [dirty]);
   const { fitView } = useReactFlow<TaskNode, Edge>();
   const selected = plan.tasks.find((task) => task.id === selectedId);
   const edges: Edge[] = plan.tasks.flatMap((task) => task.depends_on.map((source) => ({
@@ -80,6 +91,27 @@ function Editor() {
     setSelectedId(id);
     setNodes((current) => current.map((node) => ({ ...node, selected: node.id === id })));
   }
+
+  function markChanged() {
+    setDirty(true);
+    setNotice('');
+  }
+
+  function explainLink(sourceId: string, sourceType: string, targetId: string, targetType: string) {
+    if (sourceType === targetType) {
+      setNotice('请连接上游任务的输出端和下游任务的输入端。');
+      return;
+    }
+    const [source, target] = sourceType === 'source' ? [sourceId, targetId] : [targetId, sourceId];
+    const error = linkError(plan, source, target);
+    if (error) setNotice(error);
+  }
+
+  const showConnectionError: OnConnectEnd = (_, { fromHandle, toHandle, isValid }) => {
+    if (!isValid && fromHandle && toHandle) {
+      explainLink(fromHandle.nodeId, fromHandle.type, toHandle.nodeId, toHandle.type);
+    }
+  };
 
   function save() {
     try {
@@ -100,7 +132,7 @@ function Editor() {
     setNodes((current) => [...current.map((node) => ({ ...node, selected: false })),
       { ...makeNode(task, current.length), selected: true }]);
     setSelectedId(task.id);
-    setDirty(true);
+    markChanged();
     requestAnimationFrame(() => void fitView({ padding: 0.24, duration: 200, maxZoom: 1 }));
   }
 
@@ -109,7 +141,7 @@ function Editor() {
     setPlan((current) => ({ tasks: current.tasks.map((task) => task.id === selected.id ? { ...task, title } : task) }));
     setNodes((current) => current.map((node) => node.id === selected.id
       ? { ...node, data: { ...node.data, title }, ariaLabel: title } : node));
-    setDirty(true);
+    markChanged();
   }
 
   return <div className="workspace">
@@ -142,17 +174,38 @@ function Editor() {
             <ReactFlow<TaskNode, Edge> nodes={nodes} edges={edges} nodeTypes={nodeTypes}
               fitView fitViewOptions={{ padding: 0.24, maxZoom: 1 }} minZoom={0.15} maxZoom={1.8}
               deleteKeyCode={null}
-              onNodesChange={onNodesChange} onNodeDragStop={() => setDirty(true)}
+              onNodesChange={(changes) => {
+                onNodesChange(changes);
+                if (changes.some((change) => change.type === 'position' && change.position)) markChanged();
+              }}
               onNodeClick={(_, node) => select(node.id)} onPaneClick={() => select(null)}
               onSelectionChange={({ nodes: selection }) => {
                 if (selection.length === 1) setSelectedId(selection[0].id);
               }}
-              isValidConnection={({ source, target }) => canLink(plan, source, target)}
+              isValidConnection={({ source, target }) => linkError(plan, source, target) === null}
+              onConnectStart={() => setNotice('')}
+              onConnectEnd={showConnectionError}
+              onClickConnectStart={(_, start) => {
+                clickStart.current = start;
+                setNotice('');
+              }}
+              onClickConnectEnd={(event) => {
+                const start = clickStart.current;
+                clickStart.current = null;
+                // Click connections do not always include the hovered handle in React Flow's state.
+                const end = event.target instanceof Element
+                  ? event.target.closest<HTMLElement>('.react-flow__handle') : null;
+                const endId = end?.dataset.nodeid;
+                if (start?.nodeId && start.handleType && endId && end) {
+                  explainLink(start.nodeId, start.handleType, endId,
+                    end.classList.contains('source') ? 'source' : 'target');
+                }
+              }}
               onConnect={({ source, target }) => {
-                if (!canLink(plan, source, target)) return;
+                if (linkError(plan, source, target)) return;
                 setPlan((current) => ({ tasks: current.tasks.map((task) => task.id === target
                   ? { ...task, depends_on: [...task.depends_on, source] } : task) }));
-                setDirty(true);
+                markChanged();
               }}>
               <Background gap={22} size={1.2} color="#b5c5e2" />
               <Controls showInteractive={false} />
@@ -174,7 +227,7 @@ function Editor() {
               <button className="unlink" aria-label={`移除依赖 ${id}`} title="移除依赖" onClick={() => {
                 setPlan((current) => ({ tasks: current.tasks.map((task) => task.id === selected.id
                   ? { ...task, depends_on: task.depends_on.filter((dep) => dep !== id) } : task) }));
-                setDirty(true);
+                markChanged();
               }}>×</button>
             </li>)}</ul> : <p className="muted">无上游依赖</p>}
           </div> : <p className="detail-body muted">选择一个任务查看详情。</p>}
