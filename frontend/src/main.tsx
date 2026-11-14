@@ -11,6 +11,8 @@ import './style.css';
 
 type TaskNode = Node<{ title: string; index: number }, 'task'>;
 const STORAGE = 'flowstudio-t04-draft';
+const GOAL_LIMIT = 4000;
+const EXAMPLE_GOAL = '设计团队缺陷跟踪工具，支持项目、负责人和状态流转，并给出测试方案。';
 
 function TaskCard({ data, selected }: NodeProps<TaskNode>) {
   return <div className={selected ? 'task-card selected' : 'task-card'}>
@@ -35,7 +37,7 @@ function makeNode(task: Task, index: number): TaskNode {
     position: initialPosition(index), ariaLabel: task.title };
 }
 
-function loadDraft(): { plan: Plan; layout: Record<string, TaskNode['position']> } {
+function loadDraft(): { plan: Plan; layout: Record<string, TaskNode['position']>; goal: string } {
   try {
     const raw = localStorage.getItem(STORAGE);
     if (raw) {
@@ -46,19 +48,21 @@ function loadDraft(): { plan: Plan; layout: Record<string, TaskNode['position']>
         if (ids.size === tasks.length && tasks.every((task) =>
           typeof task.id === 'string' && typeof task.title === 'string' &&
           Array.isArray(task.depends_on) && task.depends_on.every((id) => ids.has(id)))) {
-          return draft;
+          const goal = typeof draft.goal === 'string' ? draft.goal.slice(0, GOAL_LIMIT) : '';
+          return { plan: draft.plan, layout: draft.layout, goal };
         }
       }
     }
   } catch {
     // Show the example if storage is unavailable or contains an unreadable draft.
   }
-  return { plan: examplePlan, layout: {} };
+  return { plan: examplePlan, layout: {}, goal: '' };
 }
 
 function Editor() {
   const [draft] = useState(loadDraft);
   const [plan, setPlan] = useState(draft.plan);
+  const [goal, setGoal] = useState(draft.goal);
   const [nodes, setNodes, onNodesChange] = useNodesState<TaskNode>(
     draft.plan.tasks.map((task, index) => {
       const node = makeNode(task, index);
@@ -116,13 +120,39 @@ function Editor() {
   function save() {
     try {
       localStorage.setItem(STORAGE, JSON.stringify({
-        plan, layout: Object.fromEntries(nodes.map(({ id, position }) => [id, position])),
+        goal, plan, layout: Object.fromEntries(nodes.map(({ id, position }) => [id, position])),
       }));
       setDirty(false);
       setNotice('已保存到此浏览器。');
     } catch {
       setNotice('无法保存，请检查浏览器存储权限。');
     }
+  }
+
+  function editGoal(value: string) {
+    if (value === goal) return;
+    setGoal(value);
+    markChanged();
+  }
+
+  function loadExample() {
+    if (!goal.trim()) return;
+    const hasCanvasChanges = JSON.stringify(plan) !== JSON.stringify(examplePlan)
+      || nodes.some(({ position }, index) => {
+        const initial = initialPosition(index);
+        return position.x !== initial.x || position.y !== initial.y;
+      });
+    if (hasCanvasChanges) {
+      if (!window.confirm('加载示例将替换当前画布的任务、连线和位置。你填写的需求会保留。继续吗？')) return;
+      setPlan(examplePlan);
+      setNodes(examplePlan.tasks.map((task, index) => ({
+        ...makeNode(task, index), selected: index === 0,
+      })));
+      setSelectedId(examplePlan.tasks[0].id);
+      markChanged();
+      requestAnimationFrame(() => void fitView({ padding: 0.24, duration: 200, maxZoom: 1 }));
+    }
+    setNotice('当前画布已显示 TEST 示例计划。');
   }
 
   function addTask() {
@@ -155,9 +185,28 @@ function Editor() {
     </header>
     <main>
       <section className="project">
-        <div><h1>缺陷跟踪工具</h1><p>整理项目需求，设计缺陷状态流转与测试方案。</p></div>
+        <div><h1>编排工作台</h1></div>
         <span className="draft-state"><i />{dirty ? '有未保存的修改' : '本地草稿'}</span>
       </section>
+      <form className="goal-form" onSubmit={(event) => {
+        event.preventDefault();
+        loadExample();
+      }}>
+        <div className="goal-heading">
+          <label htmlFor="goal">项目需求</label>
+          <button type="button" className="text-button" disabled={goal === EXAMPLE_GOAL} onClick={() => {
+            if (goal.trim() && !window.confirm('用示例需求替换当前填写的内容？')) return;
+            editGoal(EXAMPLE_GOAL);
+          }}>填入示例需求</button>
+        </div>
+        <textarea id="goal" rows={2} maxLength={GOAL_LIMIT} value={goal} aria-describedby="goal-help"
+          placeholder="描述你要做什么、有哪些约束、怎样算完成……"
+          onChange={(event) => editGoal(event.target.value)} />
+        <div className="goal-actions">
+          <p id="goal-help">TEST 模式使用固定示例计划。你填写的需求可随草稿保存。</p>
+          <button className="primary" type="submit" disabled={!goal.trim()}>加载示例计划</button>
+        </div>
+      </form>
       <div className="editor">
         <aside className="tasks" aria-label="任务列表">
           <div className="panel-heading"><h2>任务列表</h2><span>{plan.tasks.length}</span></div>
