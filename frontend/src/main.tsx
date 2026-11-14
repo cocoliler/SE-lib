@@ -17,12 +17,8 @@ const EXAMPLE_GOAL = '设计团队缺陷跟踪工具，支持项目、负责人�
 function TaskCard({ data, selected }: NodeProps<TaskNode>) {
   return <div className={selected ? 'task-card selected' : 'task-card'}>
     <Handle type="target" position={Position.Left} aria-label="任务输入" />
-    <div className="task-top">
-      <span className="task-icon" aria-hidden="true">{data.index === 1 ? '▤' : '◇'}</span>
-      <span className="task-number">任务 {String(data.index).padStart(2, '0')}</span>
-    </div>
+    <span className="task-icon" aria-hidden="true">{data.index === 1 ? '▤' : '◇'}</span>
     <strong>{data.title}</strong>
-    <span className="task-state"><i />待执行</span>
     <Handle type="source" position={Position.Right} aria-label="任务输出" />
   </div>;
 }
@@ -70,7 +66,8 @@ function Editor() {
       return Number.isFinite(point?.x) && Number.isFinite(point?.y) ? { ...node, position: point } : node;
     }),
   );
-  const [selectedId, setSelectedId] = useState<string | null>(draft.plan.tasks[0].id);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [taskListOpen, setTaskListOpen] = useState(false);
   const [notice, setNotice] = useState('');
   const [dirty, setDirty] = useState(false);
   const goalDialog = useRef<HTMLDialogElement>(null);
@@ -89,8 +86,8 @@ function Editor() {
   const selected = plan.tasks.find((task) => task.id === selectedId);
   const edges: Edge[] = plan.tasks.flatMap((task) => task.depends_on.map((source) => ({
     id: JSON.stringify([source, task.id]), source, target: task.id,
-    type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed, color: '#5971a5' },
-    style: { stroke: '#5971a5', strokeWidth: 2 },
+    type: 'default', markerEnd: { type: MarkerType.ArrowClosed, color: '#7386a8' },
+    style: { stroke: '#7386a8', strokeWidth: 1.6 },
   })));
 
   function select(id: string | null) {
@@ -180,24 +177,19 @@ function Editor() {
   return <div className="workspace">
     <header className="topbar">
       <div className="brand"><span className="brand-mark" aria-hidden="true">↳</span>FlowStudio</div>
-      <span className="breadcrumb">工作台 / 编排画布</span>
+      <h1 className="breadcrumb">编排画布</h1>
       <div className="top-actions">
+        <span className="draft-state"><i />{dirty ? '未保存' : '本地草稿'}</span>
         <span className="test-label">TEST · 示例计划</span>
+        <button type="button" className="secondary" aria-haspopup="dialog"
+          onClick={() => {
+            goalDialog.current?.showModal();
+            goalInput.current?.focus();
+          }}>项目需求</button>
         <button className="primary" onClick={save}>保存草稿</button>
       </div>
     </header>
     <main>
-      <section className="project">
-        <h1>编排工作台</h1>
-        <div className="project-actions">
-          <span className="draft-state"><i />{dirty ? '未保存' : '本地草稿'}</span>
-          <button type="button" className="secondary" aria-haspopup="dialog"
-            onClick={() => {
-              goalDialog.current?.showModal();
-              goalInput.current?.focus();
-            }}>项目需求</button>
-        </div>
-      </section>
       <dialog ref={goalDialog} className="goal-dialog" aria-labelledby="goal-title">
       <form className="goal-form" onSubmit={(event) => {
         event.preventDefault();
@@ -223,18 +215,25 @@ function Editor() {
         </div>
       </form>
       </dialog>
-      <div className="editor">
-        <aside className="tasks" aria-label="任务列表">
+      <div className={selected ? 'editor inspecting' : 'editor'}>
+        <section className="graph" aria-label="任务依赖画布">
+          <div className="graph-bar"><span>{plan.tasks.length} 项任务 · {edges.length} 条依赖</span></div>
+          <div className="canvas-tools" role="group" aria-label="画布工具">
+            <button aria-label="新建任务" title="新建任务" onClick={addTask}>+</button>
+            <button aria-label="任务列表" title="任务列表" aria-expanded={taskListOpen}
+              aria-controls="task-list-panel" onClick={() => setTaskListOpen(!taskListOpen)}>☷</button>
+          </div>
+        <aside id="task-list-panel" className="tasks" aria-label="任务列表" hidden={!taskListOpen}>
           <div className="panel-heading"><h2>任务列表</h2><span>{plan.tasks.length}</span></div>
           <div className="task-list">{plan.tasks.map((task, index) =>
             <button key={task.id} className={task.id === selectedId ? 'list-task active' : 'list-task'}
-              aria-pressed={task.id === selectedId} onClick={() => select(task.id)}>
+              aria-pressed={task.id === selectedId} onClick={() => {
+                select(task.id);
+                setTaskListOpen(false);
+              }}>
               <span className="list-number">{String(index + 1).padStart(2, '0')}</span>{task.title || '未命名任务'}
             </button>)}</div>
-          <button className="add" onClick={addTask}>＋ 新建任务</button>
         </aside>
-        <section className="graph" aria-label="任务依赖画布">
-          <div className="graph-bar"><h2>任务依赖</h2><span><i />{edges.length} 条依赖</span></div>
           <div className="flow">
             <ReactFlow<TaskNode, Edge> nodes={nodes} edges={edges} nodeTypes={nodeTypes}
               fitView fitViewOptions={{ padding: 0.24, maxZoom: 1 }} minZoom={0.15} maxZoom={1.8}
@@ -244,9 +243,6 @@ function Editor() {
                 if (changes.some((change) => change.type === 'position' && change.position)) markChanged();
               }}
               onNodeClick={(_, node) => select(node.id)} onPaneClick={() => select(null)}
-              onSelectionChange={({ nodes: selection }) => {
-                if (selection.length === 1) setSelectedId(selection[0].id);
-              }}
               isValidConnection={({ source, target }) => linkError(plan, source, target) === null}
               onConnectStart={() => setNotice('')}
               onConnectEnd={showConnectionError}
@@ -272,15 +268,17 @@ function Editor() {
                   ? { ...task, depends_on: [...task.depends_on, source] } : task) }));
                 markChanged();
               }}>
-              <Background gap={22} size={1.2} color="#b5c5e2" />
+              <Background gap={20} size={1.1} color="#c5cede" />
               <Controls showInteractive={false} />
               <MiniMap pannable zoomable nodeColor="#7a9bef" maskColor="rgba(230,238,253,.65)" />
             </ReactFlow>
           </div>
         </section>
-        <aside className="details" aria-label="任务详情">
-          <div className="panel-heading"><h2>任务详情</h2></div>
-          {selected ? <div className="detail-body">
+        {selected && <aside className="details" aria-label="任务详情">
+          <div className="panel-heading"><h2>任务详情</h2>
+            <button className="close-dialog" aria-label="关闭任务详情" onClick={() => select(null)}>×</button>
+          </div>
+          <div className="detail-body">
             <label htmlFor="title">任务名称</label>
             <input id="title" maxLength={200} value={selected.title}
               onChange={(event) => rename(event.target.value)}
@@ -295,8 +293,8 @@ function Editor() {
                 markChanged();
               }}>×</button>
             </li>)}</ul> : <p className="muted">无上游依赖</p>}
-          </div> : <p className="detail-body muted">选择一个任务查看详情。</p>}
-        </aside>
+          </div>
+        </aside>}
       </div>
       <footer><span>从上游节点右侧连接到下游节点左侧。</span><span role="status">{notice}</span></footer>
     </main>
