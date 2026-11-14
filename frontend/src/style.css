@@ -57,6 +57,10 @@ h2, h3 { margin: 0; font-size: 14px; }
 .canvas-tools { position: absolute; z-index: 5; top: 52px; left: 12px; display: grid; gap: 3px; padding: 4px; border: 1px solid var(--line); border-radius: 9px; background: white; box-shadow: 0 3px 14px #17243b14; }
 .canvas-tools button { width: 31px; height: 31px; border: 0; border-radius: 5px; color: #405779; background: transparent; font-size: 19px; }
 .canvas-tools button:hover, .canvas-tools button[aria-expanded="true"] { color: var(--blue); background: #eaf1ff; }
+.canvas-tools button[aria-pressed="true"] { color: var(--blue); background: #eaf1ff; }
+.tool-divider { border-top: 1px solid var(--line); margin: 2px 4px; }
+.hand-mode .react-flow__pane, .hand-mode .react-flow__node { cursor: grab; }
+.hand-mode .react-flow__pane:active, .hand-mode .react-flow__node:active { cursor: grabbing; }
 .task-list { padding: 8px; display: grid; gap: 5px; }
 .list-task { background: white; text-align: left; color: #243958; border: 1px solid transparent; border-radius: 8px; padding: 9px; font-size: 13px; overflow-wrap: anywhere; }
 .list-task { display: flex; align-items: center; gap: 8px; }
@@ -67,6 +71,9 @@ h2, h3 { margin: 0; font-size: 14px; }
 .flow { position: absolute; inset: 0; }
 .task-card { width: 220px; min-height: 52px; padding: 9px 12px; background: white; border: 1px solid #ccd5e4; border-radius: 11px; box-shadow: 0 2px 6px #29477b13; display: flex; align-items: center; gap: 9px; }
 .task-card.selected { border-color: #3566df; box-shadow: 0 0 0 2px #bfd1ff; }
+.note-card { width: 220px; min-height: 108px; padding: 12px; border: 1px solid #ead58b; border-radius: 10px; background: #fff8df; color: #715416; font-size: 14px; line-height: 20px; }
+.note-card.selected { border-color: #b2882a; box-shadow: 0 0 0 2px #f4e4a6; }
+.note-card p { margin-top: 6px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .task-icon { color: white; background: #315ed6; width: 26px; height: 26px; flex: none; display: grid; place-items: center; border-radius: 7px; }
 .task-state { font-size: 12px; color: var(--muted); }
 .task-card strong { font-size: 14px; overflow-wrap: anywhere; }
@@ -77,6 +84,7 @@ h2, h3 { margin: 0; font-size: 14px; }
 .detail-body { padding: 16px; font-size: 13px; }
 .detail-body label, dt { color: var(--muted); }
 .detail-body input { width: 100%; margin-top: 7px; padding: 8px; border: 1px solid #bdcde6; border-radius: 7px; color: inherit; }
+.detail-body textarea { display: block; width: 100%; resize: vertical; min-height: 90px; margin-block: 8px 12px; padding: 8px; border: 1px solid #bdcde6; border-radius: 7px; color: inherit; }
 dl { display: grid; grid-template-columns: auto 1fr; gap: 10px; margin: 18px 0; }
 dd { margin: 0; overflow-wrap: anywhere; }
 ul { padding: 0; list-style: none; }
