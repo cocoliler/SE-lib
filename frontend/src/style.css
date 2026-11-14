@@ -23,17 +23,17 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 .primary { background: var(--blue); color: white; padding: 9px 15px; border: 0; border-radius: 8px; white-space: nowrap; }
 .primary:hover { background: #2048b4; }
 main { margin: 0 auto; padding: 27px 30px 16px; max-width: 1700px; }
-.project { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 21px; }
-h1 { font-size: 26px; margin: 0 0 8px; }
+.project { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 12px; }
+h1 { font-size: 22px; margin: 0; }
 p { margin: 0; }
 .project p, .draft-state, footer { color: var(--muted); font-size: 13px; }
 .draft-state { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
-.goal-form { padding: 14px 16px; margin-bottom: 16px; background: white; border: 1px solid var(--line); border-radius: 12px; }
-.goal-heading, .goal-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.goal-heading label { font-size: 14px; font-weight: 700; }
-.goal-heading button, .goal-actions p { font-size: 13px; }
-.goal-actions p { color: var(--muted); }
-.goal-form textarea { display: block; width: 100%; margin-block: 10px; padding: 9px 11px; resize: vertical; border: 1px solid #bdcde6; border-radius: 7px; color: inherit; font-size: 14px; }
+.goal-form { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: start; margin-bottom: 12px; }
+.goal-form label { align-self: start; line-height: 36px; font-size: 13px; font-weight: 650; }
+.goal-actions { display: flex; align-items: center; justify-content: end; gap: 8px; }
+.goal-actions button { font-size: 13px; min-height: 36px; white-space: nowrap; }
+.goal-form textarea { display: block; width: 100%; min-height: 36px; padding: 7px 10px; resize: vertical; border: 1px solid #bdcde6; border-radius: 7px; color: inherit; background: white; font-size: 14px; line-height: 20px; }
+.goal-form textarea:focus-visible { outline-width: 1px; outline-offset: 1px; }
 i { background: #6885b3; height: 7px; width: 7px; border-radius: 50%; display: inline-block; flex: none; }
 .editor { display: grid; grid-template-columns: minmax(160px, 210px) minmax(380px, 1fr) minmax(216px, 264px); height: max(520px, calc(100dvh - 211px)); overflow: hidden; border: 1px solid var(--line); border-radius: 15px; background: white; }
 .tasks, .details { min-width: 0; overflow: auto; }
@@ -82,5 +82,6 @@ footer { margin-top: 12px; display: flex; gap: 10px; justify-content: space-betw
   .breadcrumb { display: none; }
   .editor { grid-template-columns: minmax(0, 1fr); height: auto; }
   .graph { min-height: 400px; border: 0; border-block: 1px solid var(--line); }
-  .project { align-items: start; flex-direction: column; }
+  .goal-form { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .goal-form label { line-height: 20px; }
 }

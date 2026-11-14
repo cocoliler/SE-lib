@@ -185,25 +185,23 @@ function Editor() {
     </header>
     <main>
       <section className="project">
-        <div><h1>编排工作台</h1></div>
+        <h1>编排工作台</h1>
         <span className="draft-state"><i />{dirty ? '有未保存的修改' : '本地草稿'}</span>
       </section>
       <form className="goal-form" onSubmit={(event) => {
         event.preventDefault();
         loadExample();
       }}>
-        <div className="goal-heading">
-          <label htmlFor="goal">项目需求</label>
+        <label htmlFor="goal">项目需求</label>
+        <textarea id="goal" rows={1} maxLength={GOAL_LIMIT} value={goal}
+          aria-description="加载时使用固定的 TEST 示例。需求可随草稿保存。"
+          placeholder="描述项目目标与验收要求"
+          onChange={(event) => editGoal(event.target.value)} />
+        <div className="goal-actions">
           <button type="button" className="text-button" disabled={goal === EXAMPLE_GOAL} onClick={() => {
             if (goal.trim() && !window.confirm('用示例需求替换当前填写的内容？')) return;
             editGoal(EXAMPLE_GOAL);
-          }}>填入示例需求</button>
-        </div>
-        <textarea id="goal" rows={2} maxLength={GOAL_LIMIT} value={goal} aria-describedby="goal-help"
-          placeholder="描述你要做什么、有哪些约束、怎样算完成……"
-          onChange={(event) => editGoal(event.target.value)} />
-        <div className="goal-actions">
-          <p id="goal-help">TEST 模式使用固定示例计划。你填写的需求可随草稿保存。</p>
+          }}>填入示例</button>
           <button className="primary" type="submit" disabled={!goal.trim()}>加载示例计划</button>
         </div>
       </form>
