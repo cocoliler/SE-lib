@@ -2,7 +2,7 @@
 
 > 合并自 `docs/architecture/` 下 15 篇设计文档（系统架构、模块设计、领域模型、规格模型、任务分解、
 > 编排引擎、校验协议、PM Agent、接口规范、数据库、状态管理、多 Agent、通信、P2 扩展）
-> 与 `docs/development/CONTRACT_WORKFLOW.md`。日期 2026-11-15。
+> 日期 2026-11-15。契约协作见 [工程组织与契约管理](../../docs/development/PROJECT_STRUCTURE.md)。
 >
 > 本文描述"应该怎样"，不等于"已经跑通"。真实实现状态集中在第 14 节。
 
@@ -28,7 +28,7 @@
 
 ## 1 架构总览
 
-### 1.1 逻辑架构（实线当前，虚线后续）
+### 1.1 目标逻辑架构（虚线为 P2）
 
 ```mermaid
 flowchart LR
@@ -48,7 +48,7 @@ flowchart LR
  MON -.SSE.-> U
 ```
 
-### 1.2 当前作业 2 数据流
+### 1.2 作业 2 目标数据流
 
 ```mermaid
 flowchart LR
@@ -113,12 +113,12 @@ Validation / Orchestration 不导入 FastAPI、ORM 或 LLM SDK。
 
 | 数据流节点 | 契约模型 | Schema 文件 | 当前状态 |
 |---|---|---|---|
-| Design Spec 表单或 JSON → 标准化 | `DesignSpecContent` | `design-spec.schema.json` | 契约完成，入口未实现（B/T03） |
+| Design Spec 表单或 JSON → 标准化 | `DesignSpecContent` | `design-spec.schema.json` | 前端分支已实现本地表单与 JSON 导入；正式版本待接口 |
 | 保存 SpecRevision | `SpecRevision` | `spec-revision.schema.json` | 契约完成，落库未实现（E/T02） |
 | PM Agent 生成 TaskProposal | `TaskProposal` | `task-proposal.schema.json` | 契约 + 样例完成，Agent 未实现（C/T04） |
 | 规划运行与失败 | `PlanningRun`、`PlanningRunCreated`、`ErrorEnvelope` | `planning-run.schema.json`、`planning-run-created.schema.json`、`error-envelope.schema.json` | 契约 + 样例完成，运行未实现（E/T02） |
-| Schema / 引用 / DAG 校验 | `ValidationReport` | `validation-report.schema.json` | 契约完成，算法未实现（D/T05） |
-| Orchestrator 拓扑批次 | `PlanDerivation` | `plan-derivation.schema.json` | 契约完成，算法未实现（D/T05） |
+| Schema / 引用 / DAG 校验 | `ValidationReport` | `validation-report.schema.json` | 前端分支已有本地预检和拓扑批次；T05 服务端待实现 |
+| Orchestrator 拓扑批次 | `PlanDerivation` | `plan-derivation.schema.json` | 前端分支已有本地预检和拓扑批次；T05 服务端待实现 |
 | 保存 PlanRevision | `PlanRevision` | `plan-revision.schema.json` | 契约完成，CAS 落库未实现（E/T07） |
 | 布局与视口 | `Layout` | `layout.schema.json` | 契约完成，接口未实现（E/T07） |
 | 历史导出 | `ExportBundle` | `export-bundle.schema.json` | 契约完成，接口未实现（E/T07） |
@@ -743,7 +743,7 @@ REST 创建命令和读快照；规划页每 1 秒轮询，后台标签降为 5 
 
 ### 14.1 已实现：统一契约层（T01）
 
-唯一事实源是 `tech/flowstudio_contracts/` 下的 Pydantic 模型，任何手写 JSON Schema 都已废止。
+字段与可执行约束来自 `tech/flowstudio_contracts/` 下的 Pydantic 模型。`docs/contracts/` 保留为早期设计附件，前端分支使用 `tech/artifacts/` 生成物。
 
 | 模块 | 内容 | 主要消费者 |
 |---|---|---|
@@ -773,8 +773,7 @@ tech/
 frontend/src/api/generated/contracts.ts   # 前端消费的类型（生成物，禁止手改）
 ```
 
-前端类型单独放在 `frontend/`，是因为 B 的代码按 `@/api/generated/contracts` 引用它；
-其余产物都在 `tech/artifacts/`，不再额外镜像一份。
+生成的 TypeScript 位于 `frontend/src/api/generated/contracts.ts`，供前端直接导入。其余产物统一在 `tech/artifacts/`。分支合并状态见[实现审计](../../docs/PROJECT_AUDIT.md)。
 
 `artifacts/examples` 是**契约样例**，不构成产品模板库：默认规划仍只依据用户规格，
 `fixture_id` 只能显式选择已登记的 TEST 夹具。
@@ -806,8 +805,7 @@ python tech/scripts/export_contracts.py --check
   不新增私有错误码。
 - **E（数据与平台）**：持久化 `SpecRevision`/`PlanRevision`/`Layout`；散列统一用 `canonical_json` + `sha256_hex`。
   版本冲突返回 `ErrorCode.REVISION_CONFLICT`（409）并附当前版本。
-- **B（前端）**：只引用 `frontend/src/api/generated/contracts.ts` 与 `tech/artifacts/examples`，
-  不改类型定义；画布坐标与注释属于 `Layout`，不参与业务顺序与计划 hash。
+- **B（前端）**：消费生成 TypeScript 与 JSON Schema，使用契约样例做回归。草稿 UI 状态和注释布局经适配，在正式提交时分别映射业务 DTO 与 Layout。
 - **F（测试）**：`--check`、Schema 元校验、样例回放、文档端点同步测试都是现成证据。
 
 ### 14.4 契约层强制 / 非强制边界
@@ -829,11 +827,13 @@ python tech/scripts/export_contracts.py --check
 - 阶段迁移合法性、必需类别、孤立任务；
 - 语义质量（是否真正实现需求）与关键缺失判断。
 
-### 14.5 未完成
+### 14.5 浏览器交付与待联调项
+
+前端分支支持手动或导入 TaskProposal，浏览器进行覆盖、依赖、关键假设等预检并生成拓扑批次。规格、草稿及历史快照可保存到浏览器。会议室预约是显式 PRESET，正式 PlanningRun 仍由后端提供。当前前端证据见[实现审计](../../docs/PROJECT_AUDIT.md)。
 
 - **已完成**：契约与生成物、契约测试（含"文档端点表 == OpenAPI 端点"的自动比对）、`ErrorEnvelope` 结构。
 - **未完成**：FastAPI 路由、事务/CAS 落库、幂等键存储、Host/Origin 校验、静态前端托管、
-  PM Agent 实现、编排算法实现。
+  PM Agent 实现与 T05 服务端权威编排。
 - **约定**：T02 落地后必须用真实 `app.openapi()` 与 `tech/artifacts/openapi.json` 比对，
   差异以契约为准修改路由；不得反过来手改该产物。
 

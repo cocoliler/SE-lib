@@ -1,30 +1,27 @@
 # 工程组织与契约管理
-## 当前与目标目录
-当前仓库跟踪frontend，main没有backend业务代码；prototype目录本地只有缓存，不是可运行后端。CLI历史原型在独立分支。
-以下为待开发目标：
+
+## 已跟踪目录
+
 ```text
-frontend/src/
-  app/                       # 工作区和路由
-  features/spec/
-  features/planning/
-  features/workflow/         # 现有画布逐步拆分
-  api/generated/             # OpenAPI生成，不手改
-  styles/tokens.css
-backend/
-  app/api/
-  app/application/           # 用例、命令、PlanningRun协调
-  app/domain/                # DTO、纯验证和拓扑
-  app/agents/pm/
-  app/providers/
-  app/persistence/           # SQLAlchemy仓储
-  migrations/
-contracts/                   # 实施后生成OpenAPI/JSON Schema
-tests/unit/ integration/ e2e/ live/
-docs/contracts/              # 当前设计Schema附件
-# 本轮不增加产品案例或预设模板目录
+frontend/
+  src/                       # 项目工作区、规格、任务、画布和浏览器存储
+  src/api/generated/         # 契约生成类型
+  tests/                     # 领域测试与 Chromium 端到端测试
+tech/
+  flowstudio_contracts/      # Pydantic 模型，字段与约束的事实源
+  artifacts/                 # JSON Schema、OpenAPI、样例、哈希清单
+  scripts/export_contracts.py
+  docs/                      # 系统架构与技术选型
+docs/                        # 产品、交互、实施、验收及设计参考
 ```
 
-## 单一契约
-设计期以docs/contracts Schema和架构语义为准；Phase1建立Pydantic实现并生成contracts/OpenAPI及TS。切换时将设计Schema改为生成产物或指向生成文件，不长期双手维护。
-CI检查导出无差异、未知字段拒绝、Schema样例可解析。依赖关系规则不假装能全部写成JSON Schema，Python验证器与前端快速检查共享案例。
-目录调整按功能逐步拆分，不为设计一次性搬动main.tsx。
+集成基线和当前交付状态见[实现审计](../PROJECT_AUDIT.md)。后端实现落地后再增加 `backend/`，含 FastAPI 入口、应用用例、PM 和编排模块、仓储及迁移。旧 CLI 原型位于独立分支。
+
+## 契约变更与协作
+
+1. 在 `tech/flowstudio_contracts` 修改模型及不变量。
+2. 从仓库根目录运行 `python tech/scripts/export_contracts.py`，一并提交 Schema、OpenAPI、示例、TypeScript 和清单。
+3. 运行 `python tech/scripts/export_contracts.py --check` 检查漂移，并使用 `tech/artifacts/examples` 验证前后端消费者。前端在 `frontend/src/api/generated/contracts.ts` 获取生成类型，导入校验读取生成的 Schema。
+4. 前端草稿、来源标签、布局视图可定义自己的状态，通过边界适配传入正式 DTO。浏览器预检与服务端编排共享验收用例，服务端报告负责正式保存。
+
+`docs/contracts/` 保留为既有设计附件。实际消费路径见[契约模块说明](../../tech/README.md)。

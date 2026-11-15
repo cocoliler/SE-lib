@@ -1,24 +1,19 @@
 # 通用设计摘要
-## 产品与本轮交付
-FlowStudio：通用可定制的智能软件工程工作流平台。
-最终面向规格管理、任务规划、编排、执行、监控、验证和反馈；课堂作业2只先落地：
-**Design Spec → PM Agent → Task Decomposition → Orchestrator → Workflow Visualization**。
-v3.1 交付通用规划流程的产品与技术设计。具体案例和预设模板留待后续评估。
 
-## 核心设计
-- 输入统一Design Spec，需求有稳定ID和验收条件；关键信息不足必须提示。
-- PM根据实际规格给出任务、交付、依赖、建议角色和来源需求；结构化输出、预算和有限修复。
-- 编排器纯程序完成唯一性/引用/环检查、Kahn拓扑分层及并行机会计算，复杂度O(V log V+E)。
-- 同一任务数据投影列表和画布，人工修改重校验；坐标、注释不参与业务执行顺序。
-- SpecRevision和PlanRevision不可变，PlanningRun与未来Run分开；保存采用CAS/幂等。
-- 无预设模板也可规划；可选约束通过PlanningPolicy传入，未来模板只作为此接口的适配器。
-- Windows本地单体，React/TS/Vite/React Flow，FastAPI/Pydantic/SQLite/SQLAlchemy，当前REST轮询。
-- 保留现有前端，不为技术清单引入全量UI重写；LangGraph/SSE和多Agent实际执行为P2。
+FlowStudio 面向需求结构化、计划编排、开发执行、验证与反馈。课堂作业 2 聚焦从设计规格和 PM 生成的候选任务，到可校验、可修改、可冻结的开发计划。
 
-## 关键入口
-总体/课堂流程图见 [架构](architecture/SYSTEM_ARCHITECTURE.md)。
-需求和验收连接见 [追踪矩阵](product/REQUIREMENTS_TRACEABILITY.md)。
-PM详解见 [PM设计](architecture/PM_AGENT_DESIGN.md)，算法见 [编排器](architecture/ORCHESTRATION_ENGINE.md)。
-前端见 [UI/UX](design/UI_UX_DESIGN.md) 和 [画布](design/WORKFLOW_EDITOR.md)。
-研究依据见 [研究报告](research/REFERENCE_PROJECTS.md)，风险见 [评审](DESIGN_REVIEW.md)。
-下一阶段按 [任务](development/TASK_BREAKDOWN.md)：T01统一契约→T02/T03规格→T04 PM/T05编排→T06/T07图与版本→T08验收。
+## 当前能演示的流程
+
+1. 创建空项目，填写结构化 Design Spec 或导入规格 JSON。演示时也可显式创建「会议室预约」项目。
+2. 手动录入任务或导入 TaskProposal JSON。预览显示 JSON、诊断与可计算的任务和批次统计。
+3. 重新编排。浏览器检查任务与成果引用、环、需求覆盖、假设和规模限制，然后按拓扑层计算并行批次。
+4. 在列表和画布中使用同一组任务 ID。可搜索定位、编辑依赖、卡内编辑注释、自动布局、导出 PNG、保存草稿或记录只读本地快照。
+
+## 正式规划链路的设计
+
+- PM Agent 根据 SpecRevision 和可选 PlanningPolicy 生成 TaskProposal，以预算、有限重试和诊断约束模型调用。
+- 服务端确定性编排器生成 PlanDerivation 和 ValidationReport，前端投影结果。坐标、视口和注释独立于业务顺序。
+- 通过校验并完成假设确认后可保存不可变 PlanRevision，写入用 expected_revision 与幂等键处理冲突及重试。
+- 任务规划、计划保存和实际执行分开。P2 再引入执行、成果验证与监督。
+
+下一步把现有本地前端与 T02 项目/规格 API、T04 PM、T05 服务端编排器联调，再完成 T07 正式版本与 T08 REAL 验收。参见[实现审计](PROJECT_AUDIT.md)、[工作流编辑器](design/WORKFLOW_EDITOR.md)、[技术版系统架构](../tech/docs/system-architecture.md)和[开发路线](development/ROADMAP.md)。

@@ -1,7 +1,7 @@
 # Design Spec 与通用规划参数
 ## 规格输入契约
 实体 Project → DesignSpec → SpecRevision。一个项目当前一个主规格；未来可多个。SpecRevision 即 DesignSpecVersion，不另设表。
-机器可读定义见 [Schema](../contracts/design-spec.schema.json)，本轮不附产品案例或预设模板。所有写接口拒绝未知字段，字符串 trim 后检查非空。
+机器可读定义见[生成的 Schema](../../tech/artifacts/schema/design-spec.schema.json)。显式演示入口独立于正式规划。所有写接口拒绝未知字段，字符串 trim 后检查非空。
 
 | 字段 | 类型与限制 | 含义 |
 |---|---|---|

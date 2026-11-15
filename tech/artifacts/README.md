@@ -17,4 +17,4 @@ python tech/scripts/export_contracts.py --check   # 只检查漂移
 
 `examples` 是契约夹具，用于前端 mock 与 `fixture_id` 显式选择的 TEST 运行；
 它不是产品模板库，也不参与默认规划输入。用途与边界见
-[统一契约实现与协作流程](../../docs/development/CONTRACT_WORKFLOW.md)。
+[工程组织与契约管理](../../docs/development/PROJECT_STRUCTURE.md)。

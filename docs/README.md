@@ -1,8 +1,8 @@
 # FlowStudio 通用设计文档 v3.1
 
-正式定位：通用可定制的智能软件工程工作流平台。当前先设计通用规划闭环，不补具体案例或预设模板；实际实现状态见审计。
+FlowStudio 是通用可定制的智能软件工程工作流平台。当前已有统一契约与可独立运行的浏览器前端，正式规划闭环待联调。分支状态、可运行范围和测试证据见[实现审计](PROJECT_AUDIT.md)。
 
-优先阅读：[设计摘要](DESIGN_SUMMARY.md) → [基线](BASELINE.md) → [系统架构](architecture/SYSTEM_ARCHITECTURE.md) → [评审](DESIGN_REVIEW.md)。
+优先阅读：[设计摘要](DESIGN_SUMMARY.md) → [基线](BASELINE.md) → [技术版系统架构](../tech/docs/system-architecture.md) → [评审](DESIGN_REVIEW.md)。
 
 ## 完整设计目录
 
@@ -62,8 +62,9 @@
 
 ### 契约附件与总体评审
 
-- [Design Spec JSON Schema](contracts/design-spec.schema.json)
-- [TaskProposal JSON Schema](contracts/task-proposal.schema.json)
+- [生成的 Design Spec JSON Schema](../tech/artifacts/schema/design-spec.schema.json)
+- [生成的 TaskProposal JSON Schema](../tech/artifacts/schema/task-proposal.schema.json)
+- [OpenAPI](../tech/artifacts/openapi.json)
 - [实现审计](PROJECT_AUDIT.md)
 - [总体评审](DESIGN_REVIEW.md)
 - [设计摘要](DESIGN_SUMMARY.md)
@@ -72,4 +73,4 @@
 
 保留已有目录以免重复维护：PRODUCT_VISION对应PRODUCT_POSITIONING；SRS对应REQUIREMENTS；SCOPE_AND_MILESTONES对应MVP_SCOPE；DOMAIN_MODEL/WORKFLOW_SCHEMA合并于WORKFLOW_DATA_MODEL；TECHNOLOGY_EVALUATION对应TECH_STACK。信息架构、组件树和用户旅程合并于UI_UX_DESIGN；测试方法与验收分别在TEST_STRATEGY和ACCEPTANCE_TESTS；详细图算法在ORCHESTRATION_ENGINE。
 
-不另建案例/模板文档。历史[workflow-v1](archive/workflow-v1/BASELINE.md)仅供追溯，不覆盖当前规范。旧已有案例文件如保留在仓库中，也不作为本轮新增成果或通用流程的必需输入。
+历史 [workflow-v1](archive/workflow-v1/BASELINE.md) 和原 `docs/contracts/` Schema 附件供追溯。正式字段、JSON 格式和接口见 `tech/` 生成产物。

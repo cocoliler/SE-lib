@@ -6,7 +6,9 @@ Set-Location D:\Program01\TW1\frontend
 npm ci
 npm run dev
 ```
-生产构建 npm run build；浏览器访问Vite输出地址。当前是TEST固定示例画布，不能描述为已接上PM后端。
+浏览器访问 Vite 输出地址。工作台可创建空项目，也可显式加载「会议室预约」PRESET。手动或导入任务可在浏览器完成预检、编排与快照保存；工作区显示 PM Agent 尚未连接。
+
+生产构建与前端验证分别执行 `npm run build`、`npm test`、`npm run test:browser`。浏览器测试读取生产构建，可用 `CHROME_BIN` 指定 Chromium。契约生成和一致性检查见[工程组织](PROJECT_STRUCTURE.md)。
 独立CLI分支不是main网页服务；本地prototype缓存不构成运行入口。
 
 ## 后端目标方案（尚未实施，不是现成命令）

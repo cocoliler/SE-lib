@@ -1,5 +1,7 @@
 # 系统架构
-## 逻辑架构（实线当前，虚线后续）
+[技术版系统架构](../../tech/docs/system-architecture.md)汇总统一契约及模块边界。现有前端的本地工作流和分支证据见[实现审计](../PROJECT_AUDIT.md)。下图表达目标架构，虚线表示 P2 扩展。
+
+## 目标逻辑架构
 ```mermaid
 flowchart LR
  U[本地工作台：规格 / 任务列表 / 工作流] --> API[FastAPI 应用服务]
@@ -18,7 +20,7 @@ flowchart LR
  MON -.SSE.-> U
 ```
 
-## 当前作业 2 数据流
+## 作业 2 目标数据流
 ```mermaid
 flowchart LR
  S[Design Spec 表单或 JSON] --> N[标准化 / 保存 SpecRevision]

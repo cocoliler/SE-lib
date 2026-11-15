@@ -1,6 +1,6 @@
 # REST API 契约
 ## 通用协议
-前缀 /api/v1；JSON UTF-8；最大请求 1 MiB。以下为待实现契约，当前没有这些后端接口。
+前缀 /api/v1，采用 UTF-8 JSON，最大请求 1 MiB。当前交付[生成的 OpenAPI](../../tech/artifacts/openapi.json)，尚待实现后端路由。下表用于阅读接口，精确参数及响应以生成产物为准。
 UUID 路径必须合法，版本整数≥1；分页 limit 默认20/max100，cursor 不透明；未知字段422。
 错误体 {error:{code,message,issues:Issue[],request_id}}；404 NOT_FOUND，409 REVISION_CONFLICT/IDEMPOTENCY_CONFLICT，413 PAYLOAD_TOO_LARGE，422 VALIDATION_FAILED，429 QUEUE_FULL，503 STORAGE_BUSY。
 异步模型错误写 PlanningRun.error，查询仍200；不存在记录才404。客户端不得把查询200当规划成功。
