@@ -1,18 +1,20 @@
 import type { Edge, Node, XYPosition } from '@xyflow/react';
 import type { Plan } from './plan';
 
-export type TaskNode = Node<{ title: string; index: number }, 'task'>;
+export type TaskNode = Node<{ title: string; stage: string; role: string; priority: string; batch?: number }, 'task'>;
 export type NoteNode = Node<{ text: string }, 'note'>;
+export const taskSize = { width: 240, height: 96 };
+export const noteSize = { width: 240, height: 108 };
 export type CanvasNode = TaskNode | NoteNode;
 
 export function arrangeNodes(plan: Plan, nodes: CanvasNode[]): CanvasNode[] {
   const depths = new Map<string, number>();
   const remaining = new Set(plan.tasks);
   while (remaining.size) {
-    const ready = [...remaining].filter((task) => task.depends_on.every((id) => depths.has(id)));
+    const ready = [...remaining].filter((task) => task.dependencies.every((id) => depths.has(id)));
     if (!ready.length) throw new Error('计划包含无效依赖，无法整理节点。');
     for (const task of ready) {
-      depths.set(task.id, Math.max(0, ...task.depends_on.map((id) => depths.get(id)! + 1)));
+      depths.set(task.task_id, Math.max(0, ...task.dependencies.map((id) => depths.get(id)! + 1)));
       remaining.delete(task);
     }
   }
@@ -23,22 +25,20 @@ export function arrangeNodes(plan: Plan, nodes: CanvasNode[]): CanvasNode[] {
     const depth = depths.get(node.id) ?? 0;
     const y = heights.get(depth) ?? 0;
     positions.set(node.id, { x: depth * 320, y });
-    heights.set(depth, y + (node.measured?.height ?? 52) + 40);
+    heights.set(depth, y + (node.height ?? node.measured?.height ?? taskSize.height) + 40);
   }
-  const notesY = Math.max(0, ...heights.values()) + 24;
-  let noteIndex = 0;
-  return nodes.map((node) => ({
-    ...node,
-    position: positions.get(node.id) ?? { x: noteIndex++ * 264, y: notesY },
-  }));
+  return nodes.map((node) => {
+    const position = positions.get(node.id);
+    return position ? { ...node, position } : node;
+  });
 }
 
 export async function exportCanvas(nodes: CanvasNode[], edges: Edge[]) {
   if (!nodes.length) throw new Error('画布为空。');
   await document.fonts.ready;
   const boxes = nodes.map((node) => ({ ...node.position, node,
-    width: node.measured?.width ?? 220,
-    height: node.measured?.height ?? (node.type === 'note' ? 108 : 52),
+    width: node.width ?? node.measured?.width ?? (node.type === 'note' ? noteSize.width : taskSize.width),
+    height: node.height ?? node.measured?.height ?? (node.type === 'note' ? noteSize.height : taskSize.height),
   }));
   const left = Math.min(...boxes.map(({ x }) => x)) - 32;
   const top = Math.min(...boxes.map(({ y }) => y)) - 32;

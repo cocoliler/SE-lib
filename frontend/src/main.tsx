@@ -1,393 +1,400 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { WorkflowCanvas } from './canvas';
+import { Field, Issues, Lines, SpecEditor, TaskEditor } from './forms';
 import {
-  Background, Controls, Handle, MarkerType, MiniMap, Position, ReactFlow,
-  ReactFlowProvider, useNodesState, useReactFlow, type Edge, type Node, type NodeProps,
-  type OnConnectEnd, type OnConnectStartParams,
-} from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
-import { linkError, examplePlan, type Plan, type Task } from './plan';
-import { arrangeNodes, exportCanvas, type CanvasNode, type NoteNode, type TaskNode } from './canvas-tools';
+  assessPlan, emptySpec, linkError, newTask, planState, removeTask, validatePlanStructure, validateSpec,
+  type Issue, type Plan, type Spec, type Task,
+} from './plan';
+import {
+  createProject, downloadJson, emptyLayout, readJson, readProjects, snapshot, writeProjects,
+  type Project, type Snapshot, type Workspace,
+} from './storage';
+import { createMeetingRoomProject, meetingRoomPresetName } from './presets';
+import { BatchPanel, ImportPreview, TaskNavigator, type ImportCandidate } from './workspace-panels';
 import './style.css';
 
-const STORAGE = 'flowstudio-t04-draft';
-const GOAL_LIMIT = 4000;
-const EXAMPLE_GOAL = '设计团队缺陷跟踪工具，支持项目、负责人和状态流转，并给出测试方案。';
-
-function TaskCard({ data, selected }: NodeProps<TaskNode>) {
-  return <div className={selected ? 'task-card selected' : 'task-card'}>
-    <Handle type="target" position={Position.Left} aria-label="任务输入" />
-    <span className="task-icon" aria-hidden="true">{data.index === 1 ? '▤' : '◇'}</span>
-    <strong>{data.title}</strong>
-    <Handle type="source" position={Position.Right} aria-label="任务输出" />
-  </div>;
+const sourceLabels = { MANUAL: 'MANUAL · 手动', IMPORTED: 'IMPORTED · 导入', PRESET: 'PRESET · 预设' };
+const stateLabels = {
+  NO_PLAN: '暂无任务', PLAN_INVALID: '计划有校验问题', PLAN_VALID: '编排有效',
+  REORCHESTRATION_REQUIRED: '待重新编排', PLAN_AVAILABLE: '任务已就绪',
+};
+function Empty({ title, children }: { title: string; children: ReactNode }) {
+  return <section className="empty"><h2>{title}</h2>{children}</section>;
 }
 
-function NoteCard({ data, selected }: NodeProps<NoteNode>) {
-  return <div className={selected ? 'note-card selected' : 'note-card'}>
-    <strong>注释</strong><p>{data.text || '点击编辑注释'}</p>
-  </div>;
-}
-
-const nodeTypes = { task: TaskCard, note: NoteCard };
-const initialPosition = (index: number) => ({
-  x: (index % 2) * 330, y: Math.floor(index / 2) * 190,
-});
-
-function makeNode(task: Task, index: number): TaskNode {
-  return { id: task.id, type: 'task', data: { title: task.title, index: index + 1 },
-    position: initialPosition(index), ariaLabel: task.title };
-}
-
-function loadDraft(): { plan: Plan; layout: Record<string, Node['position']>; goal: string; notes: NoteNode[] } {
-  try {
-    const raw = localStorage.getItem(STORAGE);
-    if (raw) {
-      const draft = JSON.parse(raw);
-      if (Array.isArray(draft?.plan?.tasks) && draft.plan.tasks.length && draft.layout) {
-        const tasks: Task[] = draft.plan.tasks;
-        const ids = new Set(tasks.map((task) => task.id));
-        if (ids.size === tasks.length && tasks.every((task) =>
-          typeof task.id === 'string' && typeof task.title === 'string' &&
-          Array.isArray(task.depends_on) && task.depends_on.every((id) => ids.has(id)))) {
-          const goal = typeof draft.goal === 'string' ? draft.goal.slice(0, GOAL_LIMIT) : '';
-          const notes: NoteNode[] = [];
-          if (Array.isArray(draft.notes)) {
-            for (const note of draft.notes) {
-              if (typeof note?.id !== 'string' || ids.has(note.id) || typeof note.data?.text !== 'string'
-                || !Number.isFinite(note.position?.x) || !Number.isFinite(note.position?.y)) continue;
-              notes.push({ id: note.id, type: 'note', data: { text: note.data.text.slice(0, 500) },
-                position: { x: note.position.x, y: note.position.y }, ariaLabel: '注释' });
-              ids.add(note.id);
-            }
-          }
-          return { plan: draft.plan, layout: draft.layout, goal, notes };
-        }
-      }
-    }
-  } catch {
-    // Show the example if storage is unavailable or contains an unreadable draft.
-  }
-  return { plan: examplePlan, layout: {}, goal: '', notes: [] };
-}
-
-function Editor() {
-  const [draft] = useState(loadDraft);
-  const [plan, setPlan] = useState(draft.plan);
-  const [goal, setGoal] = useState(draft.goal);
-  const [nodes, setNodes, onNodesChange] = useNodesState<CanvasNode>([
-    ...draft.plan.tasks.map((task, index) => {
-      const node = makeNode(task, index);
-      const point = draft.layout[task.id];
-      return Number.isFinite(point?.x) && Number.isFinite(point?.y) ? { ...node, position: point } : node;
-    }), ...draft.notes,
-  ]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [taskListOpen, setTaskListOpen] = useState(false);
-  const [handMode, setHandMode] = useState(false);
-  const [exporting, setExporting] = useState(false);
+function App() {
+  const [initial] = useState(() => {
+    try { return { projects: readProjects(localStorage), error: '' }; }
+    catch { return { projects: [], error: '无法读取浏览器中的项目。原有数据已保留，请检查浏览器存储。' }; }
+  });
+  const [projects, setProjects] = useState(initial.projects);
+  const [active, setActive] = useState<string | null>(() => initial.projects[0]?.id ?? null);
+  const [unsaved, setUnsaved] = useState<Set<string>>(() => new Set());
+  const [creating, setCreating] = useState(false);
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    try { return localStorage.getItem('flowstudio.theme') === 'dark' ? 'dark' : 'light'; }
+    catch { return 'light'; }
+  });
+  const [name, setName] = useState('');
   const [notice, setNotice] = useState('');
-  const [dirty, setDirty] = useState(false);
-  const goalDialog = useRef<HTMLDialogElement>(null);
-  const goalInput = useRef<HTMLTextAreaElement>(null);
-  const clickStart = useRef<OnConnectStartParams | null>(null);
+  const [error, setError] = useState(initial.error);
+  const project = projects.find((item) => item.id === active);
+
   useEffect(() => {
-    if (!dirty) return;
-    function confirmLeaving(event: BeforeUnloadEvent) {
-      event.preventDefault();
-      event.returnValue = true;
+    if (!unsaved.size) return;
+    const guard = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = true; };
+    window.addEventListener('beforeunload', guard);
+    return () => window.removeEventListener('beforeunload', guard);
+  }, [unsaved.size]);
+
+  function save(next: Project[], message: string) {
+    if (initial.error) return false;
+    try {
+      writeProjects(localStorage, next);
+      setProjects(next);
+      setUnsaved(new Set());
+      setError('');
+      setNotice(message);
+      return true;
+    } catch {
+      setError('无法保存到此浏览器。请检查存储权限或剩余空间，当前编辑仍保留在页面上。');
+      return false;
     }
-    window.addEventListener('beforeunload', confirmLeaving);
-    return () => window.removeEventListener('beforeunload', confirmLeaving);
-  }, [dirty]);
-  const { fitView } = useReactFlow<CanvasNode, Edge>();
-  const selected = plan.tasks.find((task) => task.id === selectedId);
-  const selectedNote = nodes.find((node): node is NoteNode => node.id === selectedId && node.type === 'note');
-  const edges: Edge[] = plan.tasks.flatMap((task) => task.depends_on.map((source) => ({
-    id: JSON.stringify([source, task.id]), source, target: task.id,
-    type: 'default', markerEnd: { type: MarkerType.ArrowClosed, color: '#7386a8' },
-    style: { stroke: '#7386a8', strokeWidth: 1.6 },
-  })));
+  }
+
+  function addProject(next: Project) {
+    if (!save([...projects, next], next.name + '已保存到此浏览器')) return;
+    setActive(next.id);
+    setName('');
+    setCreating(false);
+  }
+
+  function add(event: FormEvent) {
+    event.preventDefault();
+    if (name.trim()) addProject(createProject(name.trim()));
+  }
+
+  const createExample = () => addProject(createMeetingRoomProject(projects));
+
+  function update(id: string, apply: (current: Workspace) => Workspace) {
+    setProjects((items) => items.map((item) => item.id === id ? { ...item, workspace: apply(item.workspace) } : item));
+    setUnsaved((current) => current.has(id) ? current : new Set([...current, id]));
+  }
+
+  function toggleTheme() {
+    const next = theme === 'light' ? 'dark' : 'light';
+    setTheme(next);
+    try { localStorage.setItem('flowstudio.theme', next); } catch { /* Keep the theme for this session. */ }
+  }
+
+  return <div className="application" data-theme={theme}>
+    <header className="app-header">
+      <button className="brand" onClick={() => { setActive(null); setNotice(''); }}>
+        <span className="brand-mark" aria-hidden="true">↳</span>FlowStudio <small>v3.1</small>
+      </button>
+      <span className="header-divider" />
+      {projects.length ? <select className="project-picker" aria-label="切换项目" value={project?.id ?? ''} onChange={(event) => {
+        setActive(event.target.value || null); setCreating(false); setNotice('');
+      }}>
+        <option value="">项目工作台</option>
+        {projects.map((item) => <option key={item.id} value={item.id}>
+          {item.name}{unsaved.has(item.id) ? ' •' : ''}
+        </option>)}
+      </select> : <span className="app-context">项目工作台</span>}
+      <button className="new-project" aria-label="新建项目" title="新建项目" onClick={() => setCreating(!creating)} disabled={!!initial.error}>＋</button>
+      <div className="header-actions">
+        {project && <><span className="local-label"><i />{unsaved.has(project.id) ? '有改动尚未保存' : '浏览器本地'}</span>
+        <button onClick={() => save(projects.map((item) => item.id === project.id ? snapshot(item) : item),
+          '已保存到此浏览器并记录快照')}>保存快照</button>
+        <button className="primary" onClick={() => save(projects, '改动已保存到此浏览器')}>保存到浏览器</button></>}
+        <button className="theme-switch" aria-pressed={theme === 'dark'} aria-label="深色外观" title="切换深色外观" onClick={toggleTheme}>{theme === 'dark' ? '☀' : '☾'}</button>
+      </div>
+    </header>
+    <main className="main">
+      {error && <p className="error banner" role="alert">{error}</p>}
+      {creating && <form className="project-form" onSubmit={add}>
+        <Field label="项目名称"><input autoFocus required maxLength={120} value={name} onChange={(event) => setName(event.target.value)} /></Field>
+        <div className="actions"><button className="primary" type="submit">创建</button>
+          <button type="button" title={meetingRoomPresetName} onClick={createExample}>从示例创建</button>
+          <button type="button" onClick={() => setCreating(false)}>取消</button></div>
+      </form>}
+      {project ? <ProjectView key={project.id} project={project} theme={theme} update={(apply) => update(project.id, apply)} notice={setNotice} />
+        : <div className="page landing">
+          <section className="panel start-panel">
+            <span className="brand-mark" aria-hidden="true">↳</span>
+            <h1>项目工作台</h1>
+            <p className="muted">{projects.length ? '从顶栏打开项目，或创建新项目。' : '暂无项目。创建项目后即可填写规格和编排任务。'}</p>
+            {!creating && <div className="actions">
+              <button className="primary" disabled={!!initial.error} onClick={() => setCreating(true)}>创建项目</button>
+              <button disabled={!!initial.error} title={meetingRoomPresetName} onClick={createExample}>从示例创建</button>
+            </div>}
+            <ol className="start-flow" aria-label="项目流程"><li>设计规格</li><li>任务规划</li><li>工作流</li></ol>
+          </section>
+        </div>}
+    </main>
+    <footer className="app-footer"><span>FlowStudio v3.1</span><span role="status">{notice}</span></footer>
+  </div>;
+}
+
+function ProjectView({ project, theme, update, notice }: {
+  project: Project; theme: 'light' | 'dark'; update(apply: (workspace: Workspace) => Workspace): void;
+  notice(message: string): void;
+}) {
+  const [tab, setTab] = useState<'spec' | 'plan' | 'history'>('spec');
+  const [view, setView] = useState<'list' | 'canvas'>('list');
+  const [showNavigator, setShowNavigator] = useState(() => window.matchMedia('(min-width: 1180px)').matches);
+  const [locateRequest, setLocateRequest] = useState<{ id: string } | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [history, setHistory] = useState<Snapshot | null>(null);
+  const [candidate, setCandidate] = useState<ImportCandidate | null>(null);
+  const [importIssues, setImportIssues] = useState<Issue[]>([]);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const importType = useRef<'spec' | 'plan'>('spec');
+  const fileRequest = useRef(0);
+  const lastTrigger = useRef<HTMLElement | null>(null);
+  const workspace = history?.workspace ?? project.workspace;
+  const { spec, plan, layout, source, edited, orchestrated } = workspace;
+  const specDraft = useMemo(() => spec ?? emptySpec(), [spec]);
+  const specIssues = useMemo(() => spec ? validateSpec(spec) : [], [spec]);
+  const ready = !!spec && !specIssues.length;
+  const assessment = useMemo(() => assessPlan(plan, specDraft), [plan, specDraft]);
+  const state = planState(plan, assessment, orchestrated && ready && !!assessment.result, edited);
+  const current = state === 'PLAN_VALID' ? assessment.result : undefined;
+  const task = plan.tasks.find((item) => item.task_id === selected);
+  const readonly = !!history;
+
+  function navigate(next: typeof tab) {
+    fileRequest.current++;
+    setCandidate(null);
+    setImportIssues([]);
+    setHistory(null);
+    setSelected(null);
+    setDeleting(null);
+    setTab(next);
+    setLocateRequest(null);
+  }
 
   function select(id: string | null) {
-    setSelectedId(id);
-    setNodes((current) => current.map((node) => ({ ...node, selected: node.id === id })));
+    if (id && !selected && document.activeElement instanceof HTMLElement) lastTrigger.current = document.activeElement;
+    setSelected(id);
+    setDeleting(null);
   }
 
-  function markChanged() {
-    setDirty(true);
-    setNotice('');
+  function closeDetails() {
+    setLocateRequest(null);
+    select(null);
+    lastTrigger.current?.focus();
   }
 
-  function explainLink(sourceId: string, sourceType: string, targetId: string, targetType: string) {
-    if (sourceType === targetType) {
-      setNotice('请连接上游任务的输出端和下游任务的输入端。');
-      return;
-    }
-    const [source, target] = sourceType === 'source' ? [sourceId, targetId] : [targetId, sourceId];
-    const error = linkError(plan, source, target);
-    if (error) setNotice(error);
+  function changeSpec(next: Spec) {
+    update((previous) => ({ ...previous, spec: next, edited: previous.plan.tasks.length > 0 || previous.edited, orchestrated: false }));
   }
 
-  const showConnectionError: OnConnectEnd = (_, { fromHandle, toHandle, isValid }) => {
-    if (!isValid && fromHandle && toHandle) {
-      explainLink(fromHandle.nodeId, fromHandle.type, toHandle.nodeId, toHandle.type);
-    }
-  };
-
-  function save() {
-    try {
-      localStorage.setItem(STORAGE, JSON.stringify({
-        goal, plan, layout: Object.fromEntries(nodes.map(({ id, position }) => [id, position])),
-        notes: nodes.filter((node) => node.type === 'note').map(({ id, data, position }) => ({ id, data, position })),
-      }));
-      setDirty(false);
-      setNotice('已保存到此浏览器。');
-    } catch {
-      setNotice('无法保存，请检查浏览器存储权限。');
-    }
+  function changePlan(apply: (plan: Plan) => Plan) {
+    update((previous) => ({
+      ...previous, plan: apply(previous.plan), source: 'MANUAL', orchestrated: false, edited: true,
+    }));
   }
 
-  function editGoal(value: string) {
-    if (value === goal) return;
-    setGoal(value);
-    markChanged();
-  }
-
-  function loadExample() {
-    if (!goal.trim()) return;
-    const hasCanvasChanges = JSON.stringify(plan) !== JSON.stringify(examplePlan)
-      || nodes.some(({ position, type }, index) => {
-        const initial = initialPosition(index);
-        return type === 'note' || position.x !== initial.x || position.y !== initial.y;
-      });
-    if (hasCanvasChanges) {
-      if (!window.confirm('加载示例将替换当前画布的任务、连线、注释和位置。你填写的需求会保留。继续吗？')) return;
-      setPlan(examplePlan);
-      setNodes(examplePlan.tasks.map((task, index) => ({
-        ...makeNode(task, index), selected: index === 0,
-      })));
-      setSelectedId(examplePlan.tasks[0].id);
-      markChanged();
-      requestAnimationFrame(() => void fitView({ padding: 0.24, duration: 200, maxZoom: 1 }));
-    }
-    setNotice('当前画布已显示 TEST 示例计划。');
-    goalDialog.current?.close();
+  function patch(id: string, fields: Partial<Task>) {
+    changePlan((previous) => ({ ...previous, tasks: previous.tasks.map((item) => item.task_id === id ? { ...item, ...fields } : item) }));
   }
 
   function addTask() {
-    setHandMode(false);
-    const task = { id: `task_${crypto.randomUUID().replaceAll('-', '').slice(0, 16)}`,
-      title: '新任务', depends_on: [] };
-    setPlan((current) => ({ tasks: [...current.tasks, task] }));
-    setNodes((current) => [...current.map((node) => ({ ...node, selected: false })),
-      { ...makeNode(task, current.length), selected: true }]);
-    setSelectedId(task.id);
-    markChanged();
-    requestAnimationFrame(() => void fitView({ padding: 0.24, duration: 200, maxZoom: 1 }));
+    if (plan.tasks.length >= 100) { notice('每份计划最多包含 100 项任务'); return; }
+    const id = 'task_' + crypto.randomUUID().replaceAll('-', '');
+    update((previous) => ({
+      ...previous, plan: { ...previous.plan, tasks: [...previous.plan.tasks, newTask(id)] }, source: 'MANUAL',
+      orchestrated: false, edited: previous.plan.tasks.length > 0 || previous.edited,
+    }));
+    select(id);
+    notice('已添加空白任务，请填写任务字段');
   }
 
-  function addNote() {
-    setHandMode(false);
-    const id = `note_${crypto.randomUUID()}`;
-    const position = { x: 0, y: Math.max(0, ...nodes.map((node) =>
-      node.position.y + (node.measured?.height ?? 108))) + 36 };
-    setNodes((current) => [...current.map((node) => ({ ...node, selected: false })),
-      { id, type: 'note', data: { text: '' }, position, selected: true, ariaLabel: '注释' }]);
-    setSelectedId(id);
-    markChanged();
-    requestAnimationFrame(() => void fitView({ padding: 0.24, duration: 200, maxZoom: 1 }));
+  function connect(upstream: string, target: string) {
+    const error = linkError(plan, upstream, target);
+    if (error) { notice(error); return; }
+    const destination = plan.tasks.find((item) => item.task_id === target);
+    if (!destination) return;
+    patch(target, { dependencies: [...destination.dependencies, upstream] });
+    notice('已添加上游依赖');
   }
 
-  function arrange() {
+  function remove(id: string) {
+    update((previous) => ({
+      ...previous, plan: removeTask(previous.plan, id), source: 'MANUAL', edited: true, orchestrated: false,
+      layout: { ...previous.layout, positions: Object.fromEntries(Object.entries(previous.layout.positions).filter(([key]) => key !== id)) },
+    }));
+    closeDetails();
+    notice('任务及引用关系已删除');
+  }
+
+  function reorchestrate() {
+    if (!assessment.result || !ready) { notice('请先解决校验问题'); return; }
+    update((previous) => ({ ...previous, orchestrated: true, edited: false }));
+    notice('本地编排完成，共 ' + assessment.result.batches.length + ' 个并行批次');
+  }
+
+  function pick(kind: 'spec' | 'plan') {
+    importType.current = kind;
+    fileInput.current?.click();
+  }
+
+  async function load(file: File) {
+    const kind = importType.current;
+    const request = ++fileRequest.current;
+    setCandidate(null);
+    setImportIssues([]);
     try {
-      setNodes(arrangeNodes(plan, nodes));
-      markChanged();
-      requestAnimationFrame(() => void fitView({ padding: 0.24, duration: 200, maxZoom: 1 }));
+      const value = await readJson(file);
+      if (request !== fileRequest.current) return;
+      const issues = kind === 'spec' ? validateSpec(value) : validatePlanStructure(value);
+      if (issues.length) { setImportIssues(issues); return; }
+      if (kind === 'spec') setCandidate({ kind, filename: file.name, value: value as Spec, issues: [] });
+      else {
+        const imported = value as Plan;
+        const ids = imported.tasks.map(({ task_id }) => task_id);
+        if (new Set(ids).size !== ids.length) {
+          setImportIssues([{ path: '/tasks', message: '任务 ID 重复，请在 JSON 中修正后重新导入' }]);
+          return;
+        }
+        const analysis = assessPlan(imported, specDraft);
+        setCandidate({ kind, filename: file.name, value: imported, issues: analysis.issues, result: analysis.result });
+      }
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : '无法整理节点。');
+      if (request === fileRequest.current) setImportIssues([{ path: '/', message: error instanceof Error ? error.message : '读取失败' }]);
     }
   }
 
-  async function downloadImage() {
-    setExporting(true);
-    try {
-      await exportCanvas(nodes, edges);
-      setNotice('已生成画布 PNG。');
-    } catch {
-      setNotice('无法导出画布图片，请重试。');
-    } finally {
-      setExporting(false);
+  function applyImport() {
+    if (!candidate) return;
+    if (candidate.kind === 'spec') changeSpec(candidate.value);
+    else {
+      const value = candidate.value;
+      update((previous) => ({
+        ...previous, plan: value, source: 'IMPORTED', edited: false, orchestrated: false,
+        layout: { ...emptyLayout(), notes: previous.layout.notes.filter((note) => !value.tasks.some((item) => item.task_id === note.id)) },
+      }));
+      setSelected(null);
     }
+    setCandidate(null);
+    notice('JSON 已导入，请保存到此浏览器');
   }
 
-  function switchMode(pan: boolean) {
-    setHandMode(pan);
-    if (pan) select(null);
-  }
+  const viewingPlan = tab === 'plan' || (tab === 'history' && !!history);
+  const canExportPlan = (plan.tasks.length > 0 || plan.blocking_questions.length > 0) && !validatePlanStructure(plan).length;
 
-  function rename(title: string) {
-    if (!selected) return;
-    setPlan((current) => ({ tasks: current.tasks.map((task) => task.id === selected.id ? { ...task, title } : task) }));
-    setNodes((current) => current.map((node) => node.type === 'task' && node.id === selected.id
-      ? { ...node, data: { ...node.data, title }, ariaLabel: title } : node));
-    markChanged();
-  }
-
-  return <div className="workspace">
-    <header className="topbar">
-      <div className="brand"><span className="brand-mark" aria-hidden="true">↳</span>FlowStudio</div>
-      <h1 className="breadcrumb">编排画布</h1>
-      <div className="top-actions">
-        <span className="draft-state"><i />{dirty ? '未保存' : '本地草稿'}</span>
-        <span className="test-label">TEST · 示例计划</span>
-        <button type="button" className="secondary" aria-haspopup="dialog"
-          onClick={() => {
-            goalDialog.current?.showModal();
-            goalInput.current?.focus();
-          }}>项目需求</button>
-        <button className="primary" onClick={save}>保存草稿</button>
-      </div>
-    </header>
-    <main>
-      <dialog ref={goalDialog} className="goal-dialog" aria-labelledby="goal-title">
-      <form className="goal-form" onSubmit={(event) => {
-        event.preventDefault();
-        loadExample();
-      }}>
-        <header className="goal-header">
-          <h2 id="goal-title">项目需求</h2>
-          <button type="button" className="close-dialog" aria-label="关闭项目需求"
-            onClick={() => goalDialog.current?.close()}>×</button>
-        </header>
-        <textarea ref={goalInput} id="goal" aria-label="需求描述" rows={5} maxLength={GOAL_LIMIT} value={goal}
-          aria-describedby="goal-mode"
-          placeholder="描述项目目标与验收要求"
-          onChange={(event) => editGoal(event.target.value)} />
-        <div className="goal-actions">
-          <span id="goal-mode">TEST 模式 · 固定示例</span>
-          <button type="button" className="text-button" disabled={goal === EXAMPLE_GOAL} onClick={() => {
-            if (goal.trim() && !window.confirm('用示例需求替换当前填写的内容？')) return;
-            editGoal(EXAMPLE_GOAL);
-          }}>填入示例</button>
-          <button type="button" className="secondary" onClick={() => goalDialog.current?.close()}>返回画布</button>
-          <button className="primary" type="submit" disabled={!goal.trim()}>加载示例计划</button>
+  return <div className={tab === 'spec' ? 'page project-page spec-page' : 'page project-page'} onKeyDown={(event) => {
+    if (event.key === 'Escape' && selected) { event.stopPropagation(); closeDetails(); }
+  }}>
+    <nav className="tabs" aria-label="项目工作区">
+      <button aria-current={tab === 'spec' ? 'page' : undefined} onClick={() => navigate('spec')}>设计规格</button>
+      <button aria-current={tab === 'plan' ? 'page' : undefined} disabled={!project.workspace.spec || !!validateSpec(project.workspace.spec).length}
+        onClick={() => navigate('plan')}>任务规划</button>
+      <button aria-current={tab === 'history' ? 'page' : undefined} onClick={() => navigate('history')}>本地历史</button>
+    </nav>
+    <input ref={fileInput} type="file" accept=".json,application/json" hidden onChange={(event) => {
+      const file = event.target.files?.[0];
+      event.target.value = '';
+      if (file) void load(file);
+    }} />
+    <Issues issues={importIssues} />
+    {candidate && <ImportPreview candidate={candidate} apply={applyImport} cancel={() => setCandidate(null)} />}
+    {tab === 'spec' && !candidate && <>
+      <header className="spec-heading">
+        <div>
+          <h1>设计规格</h1>
+          <p className={'spec-status' + (ready ? ' ready' : '')} role="status">{ready ? '规格已通过基础校验'
+            : spec ? '规格草稿 · ' + specIssues.length + ' 项待完善' : '空项目 · 尚无设计规格'}</p>
         </div>
-      </form>
-      </dialog>
-      <div className={selected || selectedNote ? 'editor inspecting' : 'editor'}>
-        <section className="graph" aria-label="任务依赖画布">
-          <div className="graph-bar"><span>{plan.tasks.length} 项任务 · {edges.length} 条依赖</span></div>
-          <div className="canvas-tools" role="group" aria-label="画布工具">
-            <button aria-label="新建任务" title="新建任务" onClick={addTask}>+</button>
-            <button aria-label="添加注释" title="添加注释" onClick={addNote}>▤</button>
-            <div className="tool-divider" />
-            <button aria-label="选择模式" title="选择模式" aria-pressed={!handMode} onClick={() => switchMode(false)}>↖</button>
-            <button aria-label="手形平移" title="手形平移" aria-pressed={handMode} onClick={() => switchMode(true)}>✋︎</button>
-            <div className="tool-divider" />
-            <button aria-label="整理节点" title="整理节点" onClick={arrange}>▦</button>
-            <button aria-label="导出图片" title="导出 PNG 图片" disabled={exporting} onClick={() => void downloadImage()}>⇩</button>
-            <button aria-label="任务列表" title="任务列表" aria-expanded={taskListOpen}
-              aria-controls="task-list-panel" onClick={() => setTaskListOpen(!taskListOpen)}>☷</button>
-          </div>
-        <aside id="task-list-panel" className="tasks" aria-label="任务列表" hidden={!taskListOpen}>
-          <div className="panel-heading"><h2>任务列表</h2><span>{plan.tasks.length}</span></div>
-          <div className="task-list">{plan.tasks.map((task, index) =>
-            <button key={task.id} className={task.id === selectedId ? 'list-task active' : 'list-task'}
-              aria-pressed={task.id === selectedId} onClick={() => {
-                select(task.id);
-                setTaskListOpen(false);
-              }}>
-              <span className="list-number">{String(index + 1).padStart(2, '0')}</span>{task.title || '未命名任务'}
-            </button>)}</div>
-        </aside>
-          <div className={handMode ? 'flow hand-mode' : 'flow'}>
-            <ReactFlow<CanvasNode, Edge> nodes={nodes} edges={edges} nodeTypes={nodeTypes}
-              fitView fitViewOptions={{ padding: 0.24, maxZoom: 1 }} minZoom={0.15} maxZoom={1.8}
-              deleteKeyCode={null}
-              nodesDraggable={!handMode} nodesConnectable={!handMode} elementsSelectable={!handMode}
-              panOnDrag={handMode ? true : [1, 2]} selectionOnDrag={!handMode}
-              onNodesChange={(changes) => {
-                onNodesChange(changes);
-                if (changes.some((change) => change.type === 'position' && change.position)) markChanged();
-              }}
-              onNodeClick={(_, node) => { if (!handMode) select(node.id); }} onPaneClick={() => select(null)}
-              isValidConnection={({ source, target }) => linkError(plan, source, target) === null}
-              onConnectStart={() => setNotice('')}
-              onConnectEnd={showConnectionError}
-              onClickConnectStart={(_, start) => {
-                clickStart.current = start;
-                setNotice('');
-              }}
-              onClickConnectEnd={(event) => {
-                const start = clickStart.current;
-                clickStart.current = null;
-                // Click connections do not always include the hovered handle in React Flow's state.
-                const end = event.target instanceof Element
-                  ? event.target.closest<HTMLElement>('.react-flow__handle') : null;
-                const endId = end?.dataset.nodeid;
-                if (start?.nodeId && start.handleType && endId && end) {
-                  explainLink(start.nodeId, start.handleType, endId,
-                    end.classList.contains('source') ? 'source' : 'target');
-                }
-              }}
-              onConnect={({ source, target }) => {
-                if (linkError(plan, source, target)) return;
-                setPlan((current) => ({ tasks: current.tasks.map((task) => task.id === target
-                  ? { ...task, depends_on: [...task.depends_on, source] } : task) }));
-                markChanged();
-              }}>
-              <Background gap={20} size={1.1} color="#c5cede" />
-              <Controls showInteractive={false} />
-              <MiniMap pannable zoomable nodeColor="#7a9bef" maskColor="rgba(230,238,253,.65)" />
-            </ReactFlow>
-          </div>
-        </section>
-        {selected && <aside className="details" aria-label="任务详情">
-          <div className="panel-heading"><h2>任务详情</h2>
-            <button className="close-dialog" aria-label="关闭任务详情" onClick={() => select(null)}>×</button>
-          </div>
-          <div className="detail-body">
-            <label htmlFor="title">任务名称</label>
-            <input id="title" maxLength={200} value={selected.title}
-              onChange={(event) => rename(event.target.value)}
-              onBlur={() => { if (!selected.title.trim()) rename('未命名任务'); }} />
-            <dl><dt>任务 ID</dt><dd><code>{selected.id}</code></dd><dt>执行状态</dt><dd className="task-state"><i />待执行</dd></dl>
-            <h3>上游依赖</h3>
-            {selected.depends_on.length ? <ul>{selected.depends_on.map((id) => <li key={id}>
-              <button className="text-button" onClick={() => select(id)}>{plan.tasks.find((task) => task.id === id)?.title || id}</button>
-              <button className="unlink" aria-label={`移除依赖 ${id}`} title="移除依赖" onClick={() => {
-                setPlan((current) => ({ tasks: current.tasks.map((task) => task.id === selected.id
-                  ? { ...task, depends_on: task.depends_on.filter((dep) => dep !== id) } : task) }));
-                markChanged();
-              }}>×</button>
-            </li>)}</ul> : <p className="muted">无上游依赖</p>}
-          </div>
-        </aside>}
-        {selectedNote && <aside className="details" aria-label="注释详情">
-          <div className="panel-heading"><h2>注释</h2>
-            <button className="close-dialog" aria-label="关闭注释详情" onClick={() => select(null)}>×</button>
-          </div>
-          <div className="detail-body">
-            <label htmlFor="note-text">注释内容</label>
-            <textarea id="note-text" maxLength={500} rows={5} value={selectedNote.data.text}
-              onChange={(event) => {
-                const text = event.target.value;
-                setNodes((current) => current.map((node) => node.id === selectedNote.id && node.type === 'note'
-                  ? { ...node, data: { text } } : node));
-                markChanged();
-              }} />
-            <button className="secondary" onClick={() => {
-              setNodes((current) => current.filter((node) => node.id !== selectedNote.id));
-              setSelectedId(null);
-              markChanged();
-            }}>删除注释</button>
-          </div>
-        </aside>}
+        <div className="actions spec-actions">
+          <button className="spec-quiet" onClick={() => pick('spec')}>导入规格 JSON</button>
+          {spec && <button className="spec-quiet" onClick={() => downloadJson('design-spec.json', spec)} disabled={!ready}>导出规格 JSON</button>}
+          {ready && <button className="primary" onClick={() => navigate('plan')}>进入任务规划</button>}
+        </div>
+      </header>
+      {spec ? <SpecEditor spec={spec} issues={specIssues} setSpec={changeSpec} />
+        : <Empty title="添加设计规格">
+          <p>填写产品目标、需求和验收标准，或导入现有规格。</p>
+          <button className="primary" onClick={() => changeSpec(emptySpec())}>填写规格</button>
+        </Empty>}
+    </>}
+    {tab === 'history' && <section className="panel history">
+      <div className="panel-title"><h2>本地历史</h2><span className="muted">保留最近 30 个快照</span></div>
+      {!project.history.length && <p className="muted">暂无快照。使用「保存快照」记录当前规格、任务和布局。</p>}
+      {project.history.map((entry) => <button key={entry.id} aria-pressed={history?.id === entry.id} onClick={() => {
+        setHistory(entry); select(null);
+      }}>{new Date(entry.at).toLocaleString('zh-CN')} · {entry.workspace.plan.tasks.length} 项任务</button>)}
+      {history && <p className="muted">只读快照 · {history.workspace.spec?.product_name || '无产品规格'}</p>}
+    </section>}
+    {viewingPlan && !candidate && <>
+      <section className="workspace-heading">
+        <div><h1>{readonly ? '历史计划' : view === 'canvas' ? '工作流画布' : '任务规划'}</h1><p className="muted">{readonly ? '历史仅供查看和导出' : 'PM Agent 服务未连接'}</p></div>
+        <div className="actions">
+          {!readonly && <button onClick={() => pick('plan')}>导入任务 JSON</button>}
+          <button onClick={() => downloadJson('task-plan.json', plan)} disabled={!canExportPlan}>导出任务 JSON</button>
+          {readonly && ready && <button onClick={() => downloadJson('design-spec.json', spec)}>导出快照规格</button>}
+          {!readonly && view === 'list' && plan.tasks.length > 0 && <button className="primary" onClick={addTask} disabled={plan.tasks.length >= 100}>手动创建任务</button>}
+        </div>
+      </section>
+      <div className="plan-bar">
+        <div className="switcher" role="group" aria-label="计划视图">
+          <button aria-pressed={view === 'list'} onClick={() => { setLocateRequest(null); setView('list'); }}>任务列表</button>
+          <button aria-pressed={view === 'canvas'} onClick={() => { setLocateRequest(null); setView('canvas'); }}>工作流</button>
+        </div>
+        {view === 'canvas' && plan.tasks.length > 0 && <button className="navigator-toggle" aria-pressed={showNavigator} onClick={() => setShowNavigator(!showNavigator)}>任务索引</button>}
+        {state !== 'NO_PLAN' && <span className={'badge ' + state.toLowerCase()}>{stateLabels[state]}</span>}
+        {source && <span className="badge" title={source}>{sourceLabels[source]}</span>}
+        {plan.tasks.length > 0 && <span className="muted">{plan.tasks.length} 项任务</span>}
+        {!readonly && plan.tasks.length > 0 && <button className="reorchestrate" onClick={reorchestrate} disabled={!assessment.result || !ready}>重新编排</button>}
       </div>
-      <footer><span>{handMode ? '拖动空白处平移画布。' : '从上游节点右侧连接到下游节点左侧。'}</span><span role="status">{notice}</span></footer>
-    </main>
+      {!readonly && plan.blocking_questions.length > 0 && <section className="panel form-panel">
+        <h3>待处理问题</h3>
+        <p className="muted">处理后可移除对应条目，再重新编排。</p>
+        <Lines label="阻断问题" value={plan.blocking_questions} onChange={(questions) => changePlan((previous) =>
+          ({ ...previous, blocking_questions: questions }))} />
+      </section>}
+      <Issues issues={assessment.issues} focus={(index) => select(plan.tasks[index]?.task_id ?? null)} />
+
+      <div className={'plan-grid' + (task ? ' inspecting' : '') + (view === 'canvas' && showNavigator && plan.tasks.length ? ' with-navigator' : '')}>
+        {view === 'canvas' && showNavigator && plan.tasks.length > 0 && <TaskNavigator tasks={plan.tasks} result={current}
+          selected={selected} locate={(id) => { select(id); setLocateRequest({ id }); }} />}
+        {view === 'canvas' ? <WorkflowCanvas key={history?.id ?? 'current'} plan={plan} layout={layout} readonly={readonly} theme={theme}
+          batches={current?.batches} locateRequest={locateRequest}
+          selected={selected} select={select} setLayout={(apply) => update((previous) => ({ ...previous, layout: apply(previous.layout) }))}
+          addTask={addTask} connect={connect} notice={notice} /> : plan.tasks.length
+          ? <section className="panel task-table" aria-label="任务列表"><table>
+            <thead><tr><th>任务</th><th>阶段</th><th>建议角色</th><th>上游</th></tr></thead>
+            <tbody>{plan.tasks.map((item) => <tr key={item.task_id} className={item.task_id === selected ? 'selected' : ''}>
+              <td><button className="link" aria-pressed={item.task_id === selected} onClick={() => select(item.task_id)}>
+                {item.name || '未命名任务'}</button><code>{item.task_id}</code></td>
+              <td>{item.stage || '—'}</td><td>{item.assigned_role || '—'}</td><td>{item.dependencies.length}</td>
+            </tr>)}</tbody>
+          </table></section> : <Empty title="暂无任务规划">
+            <p>{readonly ? '此快照未包含任务。' : '从手动创建任务开始，或导入已有计划。'}</p>
+            {!readonly && <button className="primary" onClick={addTask}>创建首个任务</button>}
+          </Empty>}
+        {task && <div className="task-detail-column">
+          <TaskEditor key={task.task_id + (history?.id ?? '')} task={task} tasks={plan.tasks} readonly={readonly}
+            patch={(fields) => patch(task.task_id, fields)} connect={(upstream) => connect(upstream, task.task_id)}
+            disconnect={(id) => {
+              const linked = task.inputs.filter((input) => input.kind === 'task' && input.task_id === id).length;
+              if (linked && !window.confirm('移除这条依赖将同时移除 ' + linked + ' 个输入绑定，继续？')) return;
+              patch(task.task_id, { dependencies: task.dependencies.filter((item) => item !== id),
+                inputs: task.inputs.filter((input) => input.kind !== 'task' || input.task_id !== id) });
+            }} remove={() => setDeleting(task.task_id)} close={closeDetails} />
+          {deleting === task.task_id && <section className="panel confirm" aria-label="确认删除任务">
+            <p>将移除任务及 {plan.tasks.filter((item) => item.dependencies.includes(task.task_id)).length} 项任务对它的依赖，以及相关输入绑定。</p>
+            <div className="actions"><button className="danger" onClick={() => remove(task.task_id)}>确认删除</button>
+              <button onClick={() => setDeleting(null)}>取消</button></div>
+          </section>}
+        </div>}
+      </div>
+      {current && <BatchPanel result={current} tasks={plan.tasks} select={select} />}
+    </>}
   </div>;
 }
 
-createRoot(document.getElementById('root')!).render(<ReactFlowProvider><Editor /></ReactFlowProvider>);
+createRoot(document.getElementById('root')!).render(<App />);
