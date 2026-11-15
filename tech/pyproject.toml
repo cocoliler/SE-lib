@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flowstudio-contracts"
+version = "0.1.0"
+description = "FlowStudio 统一契约：设计规格 → 任务分解 → 编排 → 可视化的 DTO、JSON Schema 与 OpenAPI"
+requires-python = ">=3.11"
+dependencies = ["pydantic==2.13.5"]
+
+[tool.setuptools]
+packages = ["flowstudio_contracts"]

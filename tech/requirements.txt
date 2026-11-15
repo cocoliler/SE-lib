@@ -1,0 +1,2 @@
+# T01 统一契约层的最小运行依赖（Windows 实测：Python 3.14.2 / pydantic 2.13.5）
+pydantic==2.13.5

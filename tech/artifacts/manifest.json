@@ -1,0 +1,31 @@
+{
+  "files": {
+    "frontend/src/api/generated/contracts.ts": "9ae5c83e3e3c24a6d140e3d6bf29d3c23964e615da6fc1617e76c9ecb80ade6d",
+    "tech/artifacts/examples/design-spec.json": "a1751d3d408ff32ec4cba1fb987b608ff85ffb5d22b872103921ef92e1f261e3",
+    "tech/artifacts/examples/error-envelope.json": "2fe3ea52321f10684e59528984357287d759b450fdd8d281821bd77d5c54c45a",
+    "tech/artifacts/examples/layout.json": "c7cd636ee3d8dfe43c5454d52e72a29bc97f10bd4da5826ab48dde165e50c3c3",
+    "tech/artifacts/examples/plan-derivation.json": "399a70bce2d1f7306d6e0702f3b5503d3c096d26702cf609bd5123559a9d8ed9",
+    "tech/artifacts/examples/plan-revision.json": "89476da1dcf2e6ee8744047cf8d9531eb9ba8fbb21e0e7c43c0c1222131efa1f",
+    "tech/artifacts/examples/planning-run-failed.json": "e3d63744861abe13e1df60aa9bf0de377508e98889dfeb75ee6e7c45c914cacb",
+    "tech/artifacts/examples/planning-run-succeeded.json": "3dac5d38320eb874244e10e5a404ed8c799a718709ea87e8c1f664cfb618faaf",
+    "tech/artifacts/examples/task-proposal-blocked.json": "ecbc59db7bfb29014c23e7531f3525f9b27135cd63438731839a813baafbede4",
+    "tech/artifacts/examples/task-proposal.json": "8dcc0337c87abacf45d32d4e654930c0f71ea5d1df12666697feff740a04cf34",
+    "tech/artifacts/openapi.json": "6fde8bec64231d05597ed212ea4680044684009070638d81573aaceed7d91719",
+    "tech/artifacts/schema/design-spec.schema.json": "0c7a31eac188fc7c5aa2b7c29e98627d15e421da9486128404a3d7fbb3020721",
+    "tech/artifacts/schema/error-envelope.schema.json": "a292453362b10ed9319ea724901142d944b39ef0ed1a3fb451130d522fb1b3a5",
+    "tech/artifacts/schema/export-bundle.schema.json": "ade22e408016166defa6f1a7b1b41e4d1f65450a4a72b4af5ef81121f84eee30",
+    "tech/artifacts/schema/layout.schema.json": "244ea549fce2bc043ac29ea0213f70a42eb8fa1f945c9e3481caa7ae11598cf6",
+    "tech/artifacts/schema/plan-derivation.schema.json": "573e12b2aa3b08fb5708f5a725e45890a544fe8d07fbb960877f0558370f1650",
+    "tech/artifacts/schema/plan-revision.schema.json": "ef0a9f63a75caa738a05f78eeefa84de90a84a2de3aa91727c01360b0856f2e9",
+    "tech/artifacts/schema/planning-policy.schema.json": "59a71c05fe25b115d5cc0279b85ab4d8a23e12a53d3234107d65fb70c3c61f8a",
+    "tech/artifacts/schema/planning-run-created.schema.json": "5ca9697b1eb25ee468ff8f1d4b955a6548c6140397c297e242fd8e8846b70247",
+    "tech/artifacts/schema/planning-run.schema.json": "a2709e955fd690ff79e81586246d38871199146c964933427fa7ee13e35cfe43",
+    "tech/artifacts/schema/project.schema.json": "c5c75e39395e5ac80659b36f1a6bfbae07345683c2446ff5418245e1dcf5e10c",
+    "tech/artifacts/schema/spec-revision.schema.json": "b6a03cab6993dd6d095b9b41c6fbbbad9cd63298505f64bd4007f1a94ee7b4d9",
+    "tech/artifacts/schema/task-proposal.schema.json": "4e3096f2a944c336b81c2ea751eb8a062308d471296c1cdbae820dab9b213b66",
+    "tech/artifacts/schema/validation-report.schema.json": "ff7077f7c0364675e13a05a5e240b90b7a65457c59be827ea673d9c4e675d132"
+  },
+  "generator": "tech/scripts/export_contracts.py",
+  "rules_version": "1.0",
+  "schema_version": "1.0"
+}

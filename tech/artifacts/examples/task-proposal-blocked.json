@@ -1,0 +1,7 @@
+{
+  "schema_version": "1.0",
+  "tasks": [],
+  "blocking_questions": [
+    "规格未说明记录必须归属哪个用户，是否需要多租户隔离？"
+  ]
+}

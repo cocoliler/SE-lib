@@ -1,0 +1,190 @@
+{
+  "$defs": {
+    "ApiError": {
+      "additionalProperties": false,
+      "description": "错误体：issues 复用 ValidationReport 的缺陷定位结构。",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/ErrorCode"
+        },
+        "issues": {
+          "items": {
+            "$ref": "#/$defs/Issue"
+          },
+          "title": "Issues",
+          "type": "array"
+        },
+        "message": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        },
+        "request_id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Request Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "issues",
+        "request_id"
+      ],
+      "title": "ApiError",
+      "type": "object"
+    },
+    "ErrorCode": {
+      "description": "错误响应体 {error:{code,...}} 的 code。",
+      "enum": [
+        "VALIDATION_FAILED",
+        "NOT_FOUND",
+        "REVISION_CONFLICT",
+        "IDEMPOTENCY_CONFLICT",
+        "PAYLOAD_TOO_LARGE",
+        "QUEUE_FULL",
+        "STORAGE_BUSY",
+        "RESULT_NOT_READY",
+        "ORIGIN_FORBIDDEN"
+      ],
+      "title": "ErrorCode",
+      "type": "string"
+    },
+    "Issue": {
+      "additionalProperties": false,
+      "description": "单条缺陷；path 为 JSON Pointer，例如 /tasks/2/dependencies/0。",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/IssueCode"
+        },
+        "edges": {
+          "items": {
+            "$ref": "#/$defs/TaskEdge"
+          },
+          "maxItems": 200,
+          "title": "Edges",
+          "type": "array"
+        },
+        "message": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        },
+        "path": {
+          "maxLength": 200,
+          "pattern": "^(/[^/]*)*$",
+          "title": "Path",
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/IssueSeverity"
+        },
+        "suggestion": {
+          "maxLength": 2000,
+          "minLength": 0,
+          "title": "Suggestion",
+          "type": "string"
+        },
+        "task_ids": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+            "type": "string"
+          },
+          "maxItems": 200,
+          "title": "Task Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "code",
+        "severity",
+        "path",
+        "message",
+        "task_ids",
+        "edges",
+        "suggestion"
+      ],
+      "title": "Issue",
+      "type": "object"
+    },
+    "IssueCode": {
+      "description": "ValidationReport.errors/warnings 的 code。",
+      "enum": [
+        "SPEC_REQUIRED",
+        "DUPLICATE_ID",
+        "MISSING_DEPENDENCY",
+        "SELF_DEPENDENCY",
+        "DUPLICATE_DEPENDENCY",
+        "CYCLE",
+        "INVALID_STAGE",
+        "INVALID_ROLE",
+        "INVALID_CATEGORY",
+        "STAGE_EDGE_FORBIDDEN",
+        "MISSING_INPUT",
+        "INPUT_NOT_DEPENDENCY",
+        "UNKNOWN_REQUIREMENT",
+        "REQUIRED_UNCOVERED",
+        "REQUIRED_CATEGORY",
+        "UNCONFIRMED_ASSUMPTION",
+        "CRITICAL_ASSUMPTION",
+        "POSSIBLE_DUPLICATE",
+        "ORPHAN",
+        "POLICY_UNSATISFIABLE",
+        "SOURCE_MISMATCH"
+      ],
+      "title": "IssueCode",
+      "type": "string"
+    },
+    "IssueSeverity": {
+      "enum": [
+        "error",
+        "warning"
+      ],
+      "title": "IssueSeverity",
+      "type": "string"
+    },
+    "TaskEdge": {
+      "additionalProperties": false,
+      "description": "依赖边 source→target，表示 target 必须等待 source。",
+      "properties": {
+        "source": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Source",
+          "type": "string"
+        },
+        "target": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Target",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "target"
+      ],
+      "title": "TaskEdge",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "error": {
+      "$ref": "#/$defs/ApiError"
+    }
+  },
+  "required": [
+    "error"
+  ],
+  "title": "ErrorEnvelope",
+  "type": "object"
+}

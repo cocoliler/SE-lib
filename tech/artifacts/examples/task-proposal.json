@@ -1,0 +1,200 @@
+{
+  "schema_version": "1.0",
+  "tasks": [
+    {
+      "task_id": "T-01",
+      "name": "确认规格与验收口径",
+      "description": "逐条确认需求、验收条件与约束，标出仍然模糊的地方。",
+      "category": "discovery",
+      "stage": "discovery",
+      "priority": "high",
+      "assigned_role": "analyst",
+      "dependencies": [],
+      "inputs": [],
+      "deliverables": [
+        {
+          "id": "D-01",
+          "text": "确认后的需求清单与验收口径"
+        }
+      ],
+      "acceptance_criteria": [
+        "每条 must 需求有验收条件",
+        "遗留问题列入阻塞问题"
+      ],
+      "source_requirement_ids": [
+        "R-01",
+        "R-02",
+        "NFR-01"
+      ],
+      "rationale": "规格是唯一输入，先固定验收口径避免后续返工。",
+      "assumptions": [],
+      "estimated_effort": {
+        "min_hours": 2.0,
+        "max_hours": 4.0,
+        "basis": "按 4 条需求估算",
+        "is_estimate": true
+      }
+    },
+    {
+      "task_id": "T-02",
+      "name": "数据模型与接口契约",
+      "description": "定义记录实体、字段约束与检索/导出接口结构。",
+      "category": "design",
+      "stage": "design",
+      "priority": "high",
+      "assigned_role": "architect",
+      "dependencies": [
+        "T-01"
+      ],
+      "inputs": [
+        {
+          "kind": "spec",
+          "requirement_id": "NFR-01"
+        },
+        {
+          "kind": "task",
+          "task_id": "T-01",
+          "deliverable_id": "D-01"
+        }
+      ],
+      "deliverables": [
+        {
+          "id": "D-02",
+          "text": "数据模型与接口契约文档"
+        }
+      ],
+      "acceptance_criteria": [
+        "字段与约束可被校验",
+        "未知字段处理明确"
+      ],
+      "source_requirement_ids": [
+        "R-01",
+        "R-02",
+        "NFR-01"
+      ],
+      "rationale": "契约先行的前提是数据模型稳定。",
+      "assumptions": [],
+      "estimated_effort": null
+    },
+    {
+      "task_id": "T-03",
+      "name": "实现保存与检索接口",
+      "description": "实现创建、保存与分页检索接口，并复用统一契约校验。",
+      "category": "build",
+      "stage": "build",
+      "priority": "high",
+      "assigned_role": "backend",
+      "dependencies": [
+        "T-02"
+      ],
+      "inputs": [
+        {
+          "kind": "task",
+          "task_id": "T-02",
+          "deliverable_id": "D-02"
+        }
+      ],
+      "deliverables": [
+        {
+          "id": "D-03",
+          "text": "保存与检索接口及单测"
+        }
+      ],
+      "acceptance_criteria": [
+        "重复提交幂等",
+        "检索分页返回游标"
+      ],
+      "source_requirement_ids": [
+        "R-01",
+        "R-02"
+      ],
+      "rationale": "需求 R-01/R-02 需要服务端能力支撑。",
+      "assumptions": [
+        {
+          "id": "A-01",
+          "text": "检索默认按创建时间倒序",
+          "impact": "low"
+        }
+      ],
+      "estimated_effort": null
+    },
+    {
+      "task_id": "T-04",
+      "name": "实现列表与详情界面",
+      "description": "实现检索、分页与详情展示，错误按字段路径定位。",
+      "category": "build",
+      "stage": "build",
+      "priority": "medium",
+      "assigned_role": "frontend",
+      "dependencies": [
+        "T-02"
+      ],
+      "inputs": [
+        {
+          "kind": "task",
+          "task_id": "T-02",
+          "deliverable_id": "D-02"
+        }
+      ],
+      "deliverables": [
+        {
+          "id": "D-04",
+          "text": "列表与详情界面"
+        }
+      ],
+      "acceptance_criteria": [
+        "422 错误可定位到字段",
+        "分页可前进后退"
+      ],
+      "source_requirement_ids": [
+        "R-02",
+        "NFR-01"
+      ],
+      "rationale": "界面消费同一 DTO，避免二次定义字段。",
+      "assumptions": [],
+      "estimated_effort": null
+    },
+    {
+      "task_id": "T-05",
+      "name": "导出与端到端验收",
+      "description": "实现 JSON 导出并用样例数据跑通端到端验收。",
+      "category": "verify",
+      "stage": "verify",
+      "priority": "low",
+      "assigned_role": "tester",
+      "dependencies": [
+        "T-03",
+        "T-04"
+      ],
+      "inputs": [
+        {
+          "kind": "task",
+          "task_id": "T-03",
+          "deliverable_id": "D-03"
+        },
+        {
+          "kind": "task",
+          "task_id": "T-04",
+          "deliverable_id": "D-04"
+        }
+      ],
+      "deliverables": [
+        {
+          "id": "D-05",
+          "text": "导出实现与验收记录"
+        }
+      ],
+      "acceptance_criteria": [
+        "导出与筛选结果一致",
+        "验收记录可复现"
+      ],
+      "source_requirement_ids": [
+        "R-03"
+      ],
+      "rationale": "导出依赖已完成的检索与界面。",
+      "assumptions": [],
+      "estimated_effort": null
+    }
+  ],
+  "blocking_questions": []
+}
