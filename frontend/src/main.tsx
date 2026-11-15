@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { WorkflowCanvas } from './canvas';
 import { Field, Issues, Lines, SpecEditor, TaskEditor } from './forms';
 import {
-  assessPlan, emptySpec, linkError, newTask, planState, removeTask, validatePlanStructure, validateSpec,
+  assessPlan, emptySpec, linkError, newTask, planState, removeTask, normalizeContractText, validateTaskProposal, validateSpec,
   type Issue, type Plan, type Spec, type Task,
 } from './plan';
 import {
@@ -250,18 +250,13 @@ function ProjectView({ project, theme, update, notice }: {
     try {
       const value = await readJson(file);
       if (request !== fileRequest.current) return;
-      const issues = kind === 'spec' ? validateSpec(value) : validatePlanStructure(value);
+      const issues = kind === 'spec' ? validateSpec(value) : validateTaskProposal(value);
       if (issues.length) { setImportIssues(issues); return; }
-      if (kind === 'spec') setCandidate({ kind, filename: file.name, value: value as Spec, issues: [] });
+      if (kind === 'spec') setCandidate({ kind, filename: file.name, value: normalizeContractText(value as Spec), issues: [] });
       else {
-        const imported = value as Plan;
-        const ids = imported.tasks.map(({ task_id }) => task_id);
-        if (new Set(ids).size !== ids.length) {
-          setImportIssues([{ path: '/tasks', message: '任务 ID 重复，请在 JSON 中修正后重新导入' }]);
-          return;
-        }
+        const imported = normalizeContractText(value as Plan);
         const analysis = assessPlan(imported, specDraft);
-        setCandidate({ kind, filename: file.name, value: imported, issues: analysis.issues, result: analysis.result });
+        setCandidate({ kind, filename: file.name, value: imported, issues: analysis.issues, warnings: analysis.warnings, result: analysis.result });
       }
     } catch (error) {
       if (request === fileRequest.current) setImportIssues([{ path: '/', message: error instanceof Error ? error.message : '读取失败' }]);
@@ -284,7 +279,7 @@ function ProjectView({ project, theme, update, notice }: {
   }
 
   const viewingPlan = tab === 'plan' || (tab === 'history' && !!history);
-  const canExportPlan = (plan.tasks.length > 0 || plan.blocking_questions.length > 0) && !validatePlanStructure(plan).length;
+  const canExportPlan = !validateTaskProposal(plan).length;
 
   return <div className={tab === 'spec' ? 'page project-page spec-page' : 'page project-page'} onKeyDown={(event) => {
     if (event.key === 'Escape' && selected) { event.stopPropagation(); closeDetails(); }
@@ -311,7 +306,7 @@ function ProjectView({ project, theme, update, notice }: {
         </div>
         <div className="actions spec-actions">
           <button className="spec-quiet" onClick={() => pick('spec')}>导入规格 JSON</button>
-          {spec && <button className="spec-quiet" onClick={() => downloadJson('design-spec.json', spec)} disabled={!ready}>导出规格 JSON</button>}
+          {spec && <button className="spec-quiet" onClick={() => downloadJson('design-spec.json', normalizeContractText(spec))} disabled={!ready}>导出规格 JSON</button>}
           {ready && <button className="primary" onClick={() => navigate('plan')}>进入任务规划</button>}
         </div>
       </header>
@@ -334,8 +329,8 @@ function ProjectView({ project, theme, update, notice }: {
         <div><h1>{readonly ? '历史计划' : view === 'canvas' ? '工作流画布' : '任务规划'}</h1><p className="muted">{readonly ? '历史仅供查看和导出' : 'PM Agent 服务未连接'}</p></div>
         <div className="actions">
           {!readonly && <button onClick={() => pick('plan')}>导入任务 JSON</button>}
-          <button onClick={() => downloadJson('task-plan.json', plan)} disabled={!canExportPlan}>导出任务 JSON</button>
-          {readonly && ready && <button onClick={() => downloadJson('design-spec.json', spec)}>导出快照规格</button>}
+          <button onClick={() => downloadJson('task-plan.json', normalizeContractText(plan))} disabled={!canExportPlan}>导出任务 JSON</button>
+          {readonly && spec && ready && <button onClick={() => downloadJson('design-spec.json', normalizeContractText(spec))}>导出快照规格</button>}
           {!readonly && view === 'list' && plan.tasks.length > 0 && <button className="primary" onClick={addTask} disabled={plan.tasks.length >= 100}>手动创建任务</button>}
         </div>
       </section>
@@ -357,6 +352,7 @@ function ProjectView({ project, theme, update, notice }: {
           ({ ...previous, blocking_questions: questions }))} />
       </section>}
       <Issues issues={assessment.issues} focus={(index) => select(plan.tasks[index]?.task_id ?? null)} />
+      <Issues issues={assessment.warnings} warning />
 
       <div className={'plan-grid' + (task ? ' inspecting' : '') + (view === 'canvas' && showNavigator && plan.tasks.length ? ' with-navigator' : '')}>
         {view === 'canvas' && showNavigator && plan.tasks.length > 0 && <TaskNavigator tasks={plan.tasks} result={current}

@@ -22,7 +22,7 @@ npm run test:browser
 
 ## JSON 与存储
 
-- [Design Spec Schema](../docs/contracts/design-spec.schema.json) 定义规格 JSON。
-- [TaskProposal Schema](../docs/contracts/task-proposal.schema.json) 定义本地 TaskPlan 的可交换内容。导入会先检查结构，依赖问题可在预览中查看并在应用后修正。项目内的来源、快照和画布布局保存在浏览器本地。
+- [Design Spec Schema](../tech/artifacts/schema/design-spec.schema.json) 定义规格 JSON。
+- [TaskProposal Schema](../tech/artifacts/schema/task-proposal.schema.json) 定义本地 TaskPlan 的可交换内容。导入会先检查结构，依赖问题可在预览中查看并在应用后修正。空白草稿可继续本地保存，正式任务提案至少需要一项任务或一个待补充问题。项目内的来源、快照和画布布局保存在浏览器本地。注释坐标按契约的 x/y 字段保存，之前保存的 position 格式仍可读取。
 - Draft 与本地历史使用 `flowstudio.workspace.v1`。旧示例草稿的存储键保持原样，新工作区从空白开始。
 - `PlanningProvider` 是后续接入的 TypeScript 边界。页面目前通过手动录入和 JSON 文件获得任务数据。

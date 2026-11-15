@@ -19,10 +19,11 @@ export function Lines({ label, value, onChange, disabled, error }: {
     onBlur={() => { if (value.some((line) => !line.trim())) onChange(value.filter((line) => line.trim())); }} /></Field>;
 }
 
-export function Issues({ issues, focus }: { issues: Issue[]; focus?(index: number): void }) {
+export function Issues({ issues, focus, warning = false }: { issues: Issue[]; focus?(index: number): void; warning?: boolean }) {
   if (!issues.length) return null;
-  return <section className="issues" aria-label="校验问题">
-    <h3>{issues.length} 项校验问题</h3>
+  const label = warning ? '校验警告' : '校验问题';
+  return <section className={warning ? 'issues warnings' : 'issues'} aria-label={label}>
+    <h3>{issues.length} 项{label}</h3>
     <ul>{issues.map(({ path, message }, index) => {
       const task = /^\/tasks\/(\d+)(?:\/|$)/.exec(path);
       return <li key={index}>

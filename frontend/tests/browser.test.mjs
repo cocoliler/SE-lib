@@ -117,15 +117,16 @@ test('浏览器中的空项目、规格、任务、依赖、快照和 PNG', { ti
       return true;
     }, label, value), '找不到字段：' + label);
   };
-  const upload = async (value, filename) => {
+  const uploadText = async (json, filename) => {
     await evaluate((data, name) => {
       const input = document.querySelector('input[type=file]');
       const transfer = new DataTransfer();
-      transfer.items.add(new File([JSON.stringify(data)], name, { type: 'application/json' }));
+      transfer.items.add(new File([data], name, { type: 'application/json' }));
       input.files = transfer.files;
       input.dispatchEvent(new Event('change', { bubbles: true }));
-    }, value, filename);
+    }, json, filename);
   };
+  const upload = (value, filename) => uploadText(JSON.stringify(value), filename);
   await cdp.command('Page.navigate', { url: 'http://127.0.0.1:' + server.address().port });
   await text('暂无项目');
   assert.equal(await evaluate(() => localStorage.getItem('flowstudio.workspace.v1')), null);
@@ -167,7 +168,9 @@ test('浏览器中的空项目、规格、任务、依赖、快照和 PNG', { ti
   const specFile = await until(async () => (await readdir(profile)).find((file) => file === 'design-spec.json'), '规格导出文件');
   assert.deepEqual(JSON.parse(await readFile(join(profile, specFile), 'utf8')), spec);
   await click('导入规格 JSON');
-  await upload({ ...spec, product_name: '导入后规格' }, 'spec.json');
+  await upload({ ...spec, product_name: '导入后规格', requirements: [
+    ...spec.requirements, { ...spec.requirements[0], id: 'REQ_OPTIONAL', priority: 'should' },
+  ] }, 'spec.json');
   await text('导入预览');
   await click('应用导入');
   assert.equal(await evaluate(() => document.querySelector('.spec-form input').value), '导入后规格');
@@ -184,7 +187,10 @@ test('浏览器中的空项目、规格、任务、依赖、快照和 PNG', { ti
   await click('添加交付物');
   await field('交付内容', '变更记录');
   await field('任务验收标准', '构建通过');
+  await text('必需需求 REQ_A 未被任务覆盖');
+  assert.equal(await evaluate(() => document.querySelector('.reorchestrate').disabled), true);
   await field('关联需求 ID', 'REQ_A');
+  await text('需求 REQ_OPTIONAL 未被任务覆盖');
   await click('重新编排');
   await text('编排有效');
   await field('任务名称', '已修改任务');
@@ -196,15 +202,28 @@ test('浏览器中的空项目、规格、任务、依赖、快照和 PNG', { ti
   const planFile = await until(async () => (await readdir(profile)).find((file) => file === 'task-plan.json'), '任务导出文件');
   assert.equal(JSON.parse(await readFile(join(profile, planFile), 'utf8')).tasks[0].name, '已修改任务');
   await click('导入任务 JSON');
+  await uploadText('{"tasks":[],"tasks":[]}', 'duplicate.json');
+  await text('JSON 包含重复键："tasks"');
+  await upload(plan(), 'empty-proposal.json');
+  await text('任务为空时，提案必须包含至少一个待补充问题');
   await upload({ tasks: [{ task_id: 'A' }] }, 'invalid.json');
   await text('缺少必填字段');
   assert.match(await evaluate(() => document.body.innerText), /已修改任务/);
   await upload(plan(task('A', ['B']), task('B', ['A'])), 'cycle.json');
   await text('循环依赖');
   await click('取消导入');
+  const critical = { ...task('A'), assumptions: [{ id: 'ASSUME_A', text: '仍需确认权限', impact: 'critical' }] };
+  await upload(plan(critical), 'critical.json');
+  await text('关键假设 ASSUME_A 需要补充信息');
+  await click('应用导入');
+  await text('计划有校验问题');
+  assert.equal(await evaluate(() => document.querySelector('.reorchestrate').disabled), true);
+  await click('保存到浏览器');
+  await text('改动已保存到此浏览器');
   await upload(plan(task('A'), task('B'), task('C', ['A'])), 'valid.json');
   await text('导入预览');
   await text('校验通过');
+  await text('校验通过 · 有警告');
   const importStats = await evaluate(() => [...document.querySelectorAll('.import-stats dd')].map((item) => item.textContent));
   assert.deepEqual(importStats, ['3', '1', '2', '2']);
   assert.match(await evaluate(() => document.querySelector('.json-preview pre').textContent), /schema_version/);
@@ -392,7 +411,7 @@ test('浏览器中的空项目、规格、任务、依赖、快照和 PNG', { ti
   assert.ok(Object.keys(saved.workspace.layout.positions).length === 3);
   assert.equal(saved.history.length, 1);
   assert.equal(saved.workspace.layout.notes[0].text, '拖动与画布持久化验证');
-  const savedPoint = saved.workspace.layout.notes[0].position;
+  const savedPoint = saved.workspace.layout.notes[0];
   const renderedPoint = await evaluate((transform) => {
     const matrix = new DOMMatrix(transform);
     return { x: matrix.e, y: matrix.f };

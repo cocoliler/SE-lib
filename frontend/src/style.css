@@ -129,6 +129,7 @@ textarea { resize: vertical; }
 .issues ul { margin: 6px 0 0; padding: 0; list-style: none; max-height: 180px; overflow: auto; }
 .issues li { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; overflow-wrap: anywhere; }
 .issues code { font-size: 12px; }
+.issues.warnings { color: var(--warning); background: var(--warning-bg); border-color: var(--border); }
 .import-preview, .history { display: grid; gap: 10px; margin-bottom: 16px; }
 .history > button { justify-self: start; }
 .plan-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
