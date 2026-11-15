@@ -1,0 +1,990 @@
+{
+  "$defs": {
+    "AssumptionImpact": {
+      "enum": [
+        "low",
+        "critical"
+      ],
+      "title": "AssumptionImpact",
+      "type": "string"
+    },
+    "Coverage": {
+      "additionalProperties": false,
+      "properties": {
+        "covered_ids": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+            "type": "string"
+          },
+          "maxItems": 200,
+          "title": "Covered Ids",
+          "type": "array"
+        },
+        "uncovered_ids": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+            "type": "string"
+          },
+          "maxItems": 200,
+          "title": "Uncovered Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "covered_ids",
+        "uncovered_ids"
+      ],
+      "title": "Coverage",
+      "type": "object"
+    },
+    "Deliverable": {
+      "additionalProperties": false,
+      "description": "任务产出的可引用成果；id 在其所属任务内唯一。",
+      "properties": {
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "text"
+      ],
+      "title": "Deliverable",
+      "type": "object"
+    },
+    "EstimatedEffort": {
+      "additionalProperties": false,
+      "description": "工时只能是估算：is_estimate 恒为 true，不表示真实排期承诺。",
+      "properties": {
+        "basis": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Basis",
+          "type": "string"
+        },
+        "is_estimate": {
+          "const": true,
+          "title": "Is Estimate",
+          "type": "boolean"
+        },
+        "max_hours": {
+          "exclusiveMinimum": 0,
+          "title": "Max Hours",
+          "type": "number"
+        },
+        "min_hours": {
+          "exclusiveMinimum": 0,
+          "title": "Min Hours",
+          "type": "number"
+        }
+      },
+      "required": [
+        "min_hours",
+        "max_hours",
+        "basis",
+        "is_estimate"
+      ],
+      "title": "EstimatedEffort",
+      "type": "object"
+    },
+    "Granularity": {
+      "enum": [
+        "coarse",
+        "standard",
+        "fine"
+      ],
+      "title": "Granularity",
+      "type": "string"
+    },
+    "Issue": {
+      "additionalProperties": false,
+      "description": "单条缺陷；path 为 JSON Pointer，例如 /tasks/2/dependencies/0。",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/IssueCode"
+        },
+        "edges": {
+          "items": {
+            "$ref": "#/$defs/TaskEdge"
+          },
+          "maxItems": 200,
+          "title": "Edges",
+          "type": "array"
+        },
+        "message": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        },
+        "path": {
+          "maxLength": 200,
+          "pattern": "^(/[^/]*)*$",
+          "title": "Path",
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/IssueSeverity"
+        },
+        "suggestion": {
+          "maxLength": 2000,
+          "minLength": 0,
+          "title": "Suggestion",
+          "type": "string"
+        },
+        "task_ids": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+            "type": "string"
+          },
+          "maxItems": 200,
+          "title": "Task Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "code",
+        "severity",
+        "path",
+        "message",
+        "task_ids",
+        "edges",
+        "suggestion"
+      ],
+      "title": "Issue",
+      "type": "object"
+    },
+    "IssueCode": {
+      "description": "ValidationReport.errors/warnings 的 code。",
+      "enum": [
+        "SPEC_REQUIRED",
+        "DUPLICATE_ID",
+        "MISSING_DEPENDENCY",
+        "SELF_DEPENDENCY",
+        "DUPLICATE_DEPENDENCY",
+        "CYCLE",
+        "INVALID_STAGE",
+        "INVALID_ROLE",
+        "INVALID_CATEGORY",
+        "STAGE_EDGE_FORBIDDEN",
+        "MISSING_INPUT",
+        "INPUT_NOT_DEPENDENCY",
+        "UNKNOWN_REQUIREMENT",
+        "REQUIRED_UNCOVERED",
+        "REQUIRED_CATEGORY",
+        "UNCONFIRMED_ASSUMPTION",
+        "CRITICAL_ASSUMPTION",
+        "POSSIBLE_DUPLICATE",
+        "ORPHAN",
+        "POLICY_UNSATISFIABLE",
+        "SOURCE_MISMATCH"
+      ],
+      "title": "IssueCode",
+      "type": "string"
+    },
+    "IssueSeverity": {
+      "enum": [
+        "error",
+        "warning"
+      ],
+      "title": "IssueSeverity",
+      "type": "string"
+    },
+    "PlanningConfig": {
+      "additionalProperties": false,
+      "description": "请求侧规划参数；服务端解析模型别名后写入快照。",
+      "properties": {
+        "granularity": {
+          "$ref": "#/$defs/Granularity"
+        },
+        "model": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "planning_constraints": {
+          "items": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 30,
+          "title": "Planning Constraints",
+          "type": "array"
+        },
+        "policy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlanningPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "model",
+        "granularity",
+        "planning_constraints"
+      ],
+      "title": "PlanningConfig",
+      "type": "object"
+    },
+    "PlanningMode": {
+      "enum": [
+        "REAL",
+        "TEST"
+      ],
+      "title": "PlanningMode",
+      "type": "string"
+    },
+    "PlanningPolicy": {
+      "additionalProperties": false,
+      "description": "可选过程约束；null 表示不额外限制，缺省即通用规则。",
+      "properties": {
+        "allowed_categories": {
+          "anyOf": [
+            {
+              "items": {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Allowed Categories"
+        },
+        "allowed_roles": {
+          "anyOf": [
+            {
+              "items": {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Allowed Roles"
+        },
+        "allowed_stage_edges": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/StageEdge"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Allowed Stage Edges"
+        },
+        "allowed_stages": {
+          "anyOf": [
+            {
+              "items": {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Allowed Stages"
+        },
+        "required_categories": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+            "type": "string"
+          },
+          "title": "Required Categories",
+          "type": "array"
+        },
+        "rules_version": {
+          "const": "1.0",
+          "title": "Rules Version",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "rules_version",
+        "allowed_stages",
+        "allowed_roles",
+        "allowed_categories",
+        "allowed_stage_edges",
+        "required_categories"
+      ],
+      "title": "PlanningPolicy",
+      "type": "object"
+    },
+    "PlanningStatus": {
+      "enum": [
+        "QUEUED",
+        "RUNNING",
+        "SUCCEEDED",
+        "NEEDS_INPUT",
+        "FAILED"
+      ],
+      "title": "PlanningStatus",
+      "type": "string"
+    },
+    "RunError": {
+      "additionalProperties": false,
+      "description": "规划失败诊断；retryable 必须与失败码的可重试集合一致。",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/RunFailureCode"
+        },
+        "message": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        },
+        "provider_request_id": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider Request Id"
+        },
+        "retryable": {
+          "title": "Retryable",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "title": "RunError",
+      "type": "object"
+    },
+    "RunFailureCode": {
+      "description": "PlanningRun.error.code 的取值；不含图校验缺陷（那属于 ValidationReport）。",
+      "enum": [
+        "MODEL_SCHEMA",
+        "MODEL_EMPTY",
+        "MODEL_TRUNCATED",
+        "MODEL_BUDGET",
+        "MODEL_TIMEOUT",
+        "MODEL_AUTH",
+        "MODEL_RATE_LIMITED",
+        "MODEL_NETWORK",
+        "PROCESS_INTERRUPTED",
+        "POLICY_UNSATISFIABLE",
+        "INTERNAL_ERROR"
+      ],
+      "title": "RunFailureCode",
+      "type": "string"
+    },
+    "SpecInput": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "spec",
+          "title": "Kind",
+          "type": "string"
+        },
+        "requirement_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Requirement Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "requirement_id"
+      ],
+      "title": "SpecInput",
+      "type": "object"
+    },
+    "StageEdge": {
+      "additionalProperties": false,
+      "description": "允许的阶段迁移 from→to；JSON 字段名为 from/to。",
+      "properties": {
+        "from": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "From",
+          "type": "string"
+        },
+        "to": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "To",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ],
+      "title": "StageEdge",
+      "type": "object"
+    },
+    "Task": {
+      "additionalProperties": false,
+      "properties": {
+        "acceptance_criteria": {
+          "items": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 30,
+          "minItems": 1,
+          "title": "Acceptance Criteria",
+          "type": "array"
+        },
+        "assigned_role": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Assigned Role",
+          "type": "string"
+        },
+        "assumptions": {
+          "items": {
+            "$ref": "#/$defs/TaskAssumption"
+          },
+          "maxItems": 30,
+          "title": "Assumptions",
+          "type": "array"
+        },
+        "category": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Category",
+          "type": "string"
+        },
+        "deliverables": {
+          "items": {
+            "$ref": "#/$defs/Deliverable"
+          },
+          "maxItems": 30,
+          "minItems": 1,
+          "title": "Deliverables",
+          "type": "array"
+        },
+        "dependencies": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+            "type": "string"
+          },
+          "maxItems": 99,
+          "title": "Dependencies",
+          "type": "array"
+        },
+        "description": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "estimated_effort": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EstimatedEffort"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "inputs": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "spec": "#/$defs/SpecInput",
+                "task": "#/$defs/TaskInput"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/SpecInput"
+              },
+              {
+                "$ref": "#/$defs/TaskInput"
+              }
+            ]
+          },
+          "maxItems": 200,
+          "title": "Inputs",
+          "type": "array"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "priority": {
+          "$ref": "#/$defs/TaskPriority"
+        },
+        "rationale": {
+          "maxLength": 2000,
+          "minLength": 0,
+          "title": "Rationale",
+          "type": "string"
+        },
+        "source_requirement_ids": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+            "type": "string"
+          },
+          "maxItems": 200,
+          "title": "Source Requirement Ids",
+          "type": "array"
+        },
+        "stage": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Stage",
+          "type": "string"
+        },
+        "task_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Task Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "name",
+        "description",
+        "category",
+        "stage",
+        "priority",
+        "assigned_role",
+        "dependencies",
+        "inputs",
+        "deliverables",
+        "acceptance_criteria",
+        "source_requirement_ids",
+        "rationale",
+        "assumptions",
+        "estimated_effort"
+      ],
+      "title": "Task",
+      "type": "object"
+    },
+    "TaskAssumption": {
+      "additionalProperties": false,
+      "description": "非关键假设随候选显示；critical 假设必须回到补规格流程。",
+      "properties": {
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "impact": {
+          "$ref": "#/$defs/AssumptionImpact"
+        },
+        "text": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "text",
+        "impact"
+      ],
+      "title": "TaskAssumption",
+      "type": "object"
+    },
+    "TaskEdge": {
+      "additionalProperties": false,
+      "description": "依赖边 source→target，表示 target 必须等待 source。",
+      "properties": {
+        "source": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Source",
+          "type": "string"
+        },
+        "target": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Target",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "target"
+      ],
+      "title": "TaskEdge",
+      "type": "object"
+    },
+    "TaskInput": {
+      "additionalProperties": false,
+      "properties": {
+        "deliverable_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Deliverable Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "task",
+          "title": "Kind",
+          "type": "string"
+        },
+        "task_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Task Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "task_id",
+        "deliverable_id"
+      ],
+      "title": "TaskInput",
+      "type": "object"
+    },
+    "TaskPriority": {
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ],
+      "title": "TaskPriority",
+      "type": "string"
+    },
+    "TaskProposal": {
+      "additionalProperties": false,
+      "description": "一次规划的候选任务集；tasks 为空必须伴随 blocking_questions。",
+      "properties": {
+        "blocking_questions": {
+          "items": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 30,
+          "title": "Blocking Questions",
+          "type": "array"
+        },
+        "schema_version": {
+          "const": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "tasks": {
+          "items": {
+            "$ref": "#/$defs/Task"
+          },
+          "maxItems": 100,
+          "title": "Tasks",
+          "type": "array"
+        }
+      },
+      "required": [
+        "schema_version",
+        "tasks",
+        "blocking_questions"
+      ],
+      "title": "TaskProposal",
+      "type": "object"
+    },
+    "TokenUsage": {
+      "additionalProperties": false,
+      "properties": {
+        "completion_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Completion Tokens"
+        },
+        "prompt_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prompt Tokens"
+        },
+        "total_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Total Tokens"
+        }
+      },
+      "title": "TokenUsage",
+      "type": "object"
+    },
+    "ValidationReport": {
+      "additionalProperties": false,
+      "properties": {
+        "coverage": {
+          "$ref": "#/$defs/Coverage"
+        },
+        "errors": {
+          "items": {
+            "$ref": "#/$defs/Issue"
+          },
+          "title": "Errors",
+          "type": "array"
+        },
+        "input_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Input Hash",
+          "type": "string"
+        },
+        "rules_version": {
+          "const": "1.0",
+          "title": "Rules Version",
+          "type": "string"
+        },
+        "valid": {
+          "title": "Valid",
+          "type": "boolean"
+        },
+        "warnings": {
+          "items": {
+            "$ref": "#/$defs/Issue"
+          },
+          "title": "Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "valid",
+        "errors",
+        "warnings",
+        "coverage",
+        "rules_version",
+        "input_hash"
+      ],
+      "title": "ValidationReport",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "单次规划请求。SUCCEEDED 只表示候选通过结构/图校验，不代表已保存或已执行。",
+  "properties": {
+    "attempt_count": {
+      "maximum": 3,
+      "minimum": 0,
+      "title": "Attempt Count",
+      "type": "integer"
+    },
+    "config_snapshot": {
+      "$ref": "#/$defs/PlanningConfig"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RunError"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "finished_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Finished At"
+    },
+    "fixture_id": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Fixture Id"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "mode": {
+      "$ref": "#/$defs/PlanningMode"
+    },
+    "proposal": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/TaskProposal"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "spec_revision_id": {
+      "format": "uuid",
+      "title": "Spec Revision Id",
+      "type": "string"
+    },
+    "started_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Started At"
+    },
+    "status": {
+      "$ref": "#/$defs/PlanningStatus"
+    },
+    "usage": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/TokenUsage"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "validation_report": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ValidationReport"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "id",
+    "spec_revision_id",
+    "mode",
+    "status",
+    "config_snapshot",
+    "attempt_count",
+    "created_at"
+  ],
+  "title": "PlanningRun",
+  "type": "object"
+}

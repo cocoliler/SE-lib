@@ -1,0 +1,90 @@
+{
+  "input_hash": "18fa807a2db81006066c67cea6a1ac1e7eb16df1f3a56991c214b236cbb22370",
+  "edges": [
+    {
+      "source": "T-01",
+      "target": "T-02"
+    },
+    {
+      "source": "T-02",
+      "target": "T-03"
+    },
+    {
+      "source": "T-02",
+      "target": "T-04"
+    },
+    {
+      "source": "T-03",
+      "target": "T-05"
+    },
+    {
+      "source": "T-04",
+      "target": "T-05"
+    }
+  ],
+  "execution_stages": [
+    {
+      "stage_id": "discovery",
+      "task_ids": [
+        "T-01"
+      ]
+    },
+    {
+      "stage_id": "design",
+      "task_ids": [
+        "T-02"
+      ]
+    },
+    {
+      "stage_id": "build",
+      "task_ids": [
+        "T-03",
+        "T-04"
+      ]
+    },
+    {
+      "stage_id": "verify",
+      "task_ids": [
+        "T-05"
+      ]
+    }
+  ],
+  "parallel_batches": [
+    [
+      "T-01"
+    ],
+    [
+      "T-02"
+    ],
+    [
+      "T-03",
+      "T-04"
+    ],
+    [
+      "T-05"
+    ]
+  ],
+  "ordered_task_ids": [
+    "T-01",
+    "T-02",
+    "T-03",
+    "T-04",
+    "T-05"
+  ],
+  "validation_report": {
+    "valid": true,
+    "errors": [],
+    "warnings": [],
+    "coverage": {
+      "covered_ids": [
+        "R-01",
+        "R-02",
+        "R-03",
+        "NFR-01"
+      ],
+      "uncovered_ids": []
+    },
+    "rules_version": "1.0",
+    "input_hash": "18fa807a2db81006066c67cea6a1ac1e7eb16df1f3a56991c214b236cbb22370"
+  }
+}

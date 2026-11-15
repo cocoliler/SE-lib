@@ -1,0 +1,131 @@
+{
+  "$defs": {
+    "StageEdge": {
+      "additionalProperties": false,
+      "description": "允许的阶段迁移 from→to；JSON 字段名为 from/to。",
+      "properties": {
+        "from": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "From",
+          "type": "string"
+        },
+        "to": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "To",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ],
+      "title": "StageEdge",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "可选过程约束；null 表示不额外限制，缺省即通用规则。",
+  "properties": {
+    "allowed_categories": {
+      "anyOf": [
+        {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Allowed Categories"
+    },
+    "allowed_roles": {
+      "anyOf": [
+        {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Allowed Roles"
+    },
+    "allowed_stage_edges": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/StageEdge"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Allowed Stage Edges"
+    },
+    "allowed_stages": {
+      "anyOf": [
+        {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Allowed Stages"
+    },
+    "required_categories": {
+      "items": {
+        "maxLength": 64,
+        "minLength": 1,
+        "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+        "type": "string"
+      },
+      "title": "Required Categories",
+      "type": "array"
+    },
+    "rules_version": {
+      "const": "1.0",
+      "title": "Rules Version",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "rules_version",
+    "allowed_stages",
+    "allowed_roles",
+    "allowed_categories",
+    "allowed_stage_edges",
+    "required_categories"
+  ],
+  "title": "PlanningPolicy",
+  "type": "object"
+}

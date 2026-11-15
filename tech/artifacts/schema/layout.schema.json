@@ -1,0 +1,144 @@
+{
+  "$defs": {
+    "CanvasNote": {
+      "additionalProperties": false,
+      "description": "画布注释：只参与显示，不参与业务顺序与覆盖率。",
+      "properties": {
+        "color": {
+          "anyOf": [
+            {
+              "pattern": "^#[0-9a-fA-F]{6}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Color"
+        },
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 2000,
+          "minLength": 0,
+          "title": "Text",
+          "type": "string"
+        },
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "text",
+        "x",
+        "y"
+      ],
+      "title": "CanvasNote",
+      "type": "object"
+    },
+    "Position": {
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "title": "Position",
+      "type": "object"
+    },
+    "Viewport": {
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "title": "Y",
+          "type": "number"
+        },
+        "zoom": {
+          "exclusiveMinimum": 0,
+          "title": "Zoom",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "zoom"
+      ],
+      "title": "Viewport",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "独立可更新的画布布局；不改变计划 hash。",
+  "properties": {
+    "notes": {
+      "items": {
+        "$ref": "#/$defs/CanvasNote"
+      },
+      "maxItems": 200,
+      "title": "Notes",
+      "type": "array"
+    },
+    "plan_revision_id": {
+      "format": "uuid",
+      "title": "Plan Revision Id",
+      "type": "string"
+    },
+    "positions": {
+      "patternProperties": {
+        "^[A-Za-z][A-Za-z0-9_-]*$": {
+          "$ref": "#/$defs/Position"
+        }
+      },
+      "propertyNames": {
+        "maxLength": 64,
+        "minLength": 1
+      },
+      "title": "Positions",
+      "type": "object"
+    },
+    "revision": {
+      "minimum": 0,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "viewport": {
+      "$ref": "#/$defs/Viewport"
+    }
+  },
+  "required": [
+    "plan_revision_id",
+    "revision",
+    "positions",
+    "notes",
+    "viewport"
+  ],
+  "title": "Layout",
+  "type": "object"
+}

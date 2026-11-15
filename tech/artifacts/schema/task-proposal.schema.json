@@ -1,0 +1,354 @@
+{
+  "$defs": {
+    "AssumptionImpact": {
+      "enum": [
+        "low",
+        "critical"
+      ],
+      "title": "AssumptionImpact",
+      "type": "string"
+    },
+    "Deliverable": {
+      "additionalProperties": false,
+      "description": "任务产出的可引用成果；id 在其所属任务内唯一。",
+      "properties": {
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "text"
+      ],
+      "title": "Deliverable",
+      "type": "object"
+    },
+    "EstimatedEffort": {
+      "additionalProperties": false,
+      "description": "工时只能是估算：is_estimate 恒为 true，不表示真实排期承诺。",
+      "properties": {
+        "basis": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Basis",
+          "type": "string"
+        },
+        "is_estimate": {
+          "const": true,
+          "title": "Is Estimate",
+          "type": "boolean"
+        },
+        "max_hours": {
+          "exclusiveMinimum": 0,
+          "title": "Max Hours",
+          "type": "number"
+        },
+        "min_hours": {
+          "exclusiveMinimum": 0,
+          "title": "Min Hours",
+          "type": "number"
+        }
+      },
+      "required": [
+        "min_hours",
+        "max_hours",
+        "basis",
+        "is_estimate"
+      ],
+      "title": "EstimatedEffort",
+      "type": "object"
+    },
+    "SpecInput": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "spec",
+          "title": "Kind",
+          "type": "string"
+        },
+        "requirement_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Requirement Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "requirement_id"
+      ],
+      "title": "SpecInput",
+      "type": "object"
+    },
+    "Task": {
+      "additionalProperties": false,
+      "properties": {
+        "acceptance_criteria": {
+          "items": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 30,
+          "minItems": 1,
+          "title": "Acceptance Criteria",
+          "type": "array"
+        },
+        "assigned_role": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Assigned Role",
+          "type": "string"
+        },
+        "assumptions": {
+          "items": {
+            "$ref": "#/$defs/TaskAssumption"
+          },
+          "maxItems": 30,
+          "title": "Assumptions",
+          "type": "array"
+        },
+        "category": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Category",
+          "type": "string"
+        },
+        "deliverables": {
+          "items": {
+            "$ref": "#/$defs/Deliverable"
+          },
+          "maxItems": 30,
+          "minItems": 1,
+          "title": "Deliverables",
+          "type": "array"
+        },
+        "dependencies": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+            "type": "string"
+          },
+          "maxItems": 99,
+          "title": "Dependencies",
+          "type": "array"
+        },
+        "description": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "estimated_effort": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EstimatedEffort"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "inputs": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "spec": "#/$defs/SpecInput",
+                "task": "#/$defs/TaskInput"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/SpecInput"
+              },
+              {
+                "$ref": "#/$defs/TaskInput"
+              }
+            ]
+          },
+          "maxItems": 200,
+          "title": "Inputs",
+          "type": "array"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "priority": {
+          "$ref": "#/$defs/TaskPriority"
+        },
+        "rationale": {
+          "maxLength": 2000,
+          "minLength": 0,
+          "title": "Rationale",
+          "type": "string"
+        },
+        "source_requirement_ids": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+            "type": "string"
+          },
+          "maxItems": 200,
+          "title": "Source Requirement Ids",
+          "type": "array"
+        },
+        "stage": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Stage",
+          "type": "string"
+        },
+        "task_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Task Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "name",
+        "description",
+        "category",
+        "stage",
+        "priority",
+        "assigned_role",
+        "dependencies",
+        "inputs",
+        "deliverables",
+        "acceptance_criteria",
+        "source_requirement_ids",
+        "rationale",
+        "assumptions",
+        "estimated_effort"
+      ],
+      "title": "Task",
+      "type": "object"
+    },
+    "TaskAssumption": {
+      "additionalProperties": false,
+      "description": "非关键假设随候选显示；critical 假设必须回到补规格流程。",
+      "properties": {
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "impact": {
+          "$ref": "#/$defs/AssumptionImpact"
+        },
+        "text": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "text",
+        "impact"
+      ],
+      "title": "TaskAssumption",
+      "type": "object"
+    },
+    "TaskInput": {
+      "additionalProperties": false,
+      "properties": {
+        "deliverable_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Deliverable Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "task",
+          "title": "Kind",
+          "type": "string"
+        },
+        "task_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "title": "Task Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "task_id",
+        "deliverable_id"
+      ],
+      "title": "TaskInput",
+      "type": "object"
+    },
+    "TaskPriority": {
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ],
+      "title": "TaskPriority",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "一次规划的候选任务集；tasks 为空必须伴随 blocking_questions。",
+  "properties": {
+    "blocking_questions": {
+      "items": {
+        "maxLength": 2000,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 30,
+      "title": "Blocking Questions",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "tasks": {
+      "items": {
+        "$ref": "#/$defs/Task"
+      },
+      "maxItems": 100,
+      "title": "Tasks",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "tasks",
+    "blocking_questions"
+  ],
+  "title": "TaskProposal",
+  "type": "object"
+}

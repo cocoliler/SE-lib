@@ -1,0 +1,18 @@
+{
+  "error": {
+    "code": "VALIDATION_FAILED",
+    "message": "规格内容不合法",
+    "issues": [
+      {
+        "code": "SPEC_REQUIRED",
+        "severity": "error",
+        "path": "/requirements/0/acceptance_criteria",
+        "message": "需求 R-01 缺少验收条件",
+        "task_ids": [],
+        "edges": [],
+        "suggestion": "为 R-01 补充至少一条可验证的验收条件"
+      }
+    ],
+    "request_id": "77777777-7777-4777-8777-777777777777"
+  }
+}

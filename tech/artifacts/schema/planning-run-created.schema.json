@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "poll_url": {
+      "maxLength": 300,
+      "minLength": 1,
+      "title": "Poll Url",
+      "type": "string"
+    },
+    "status": {
+      "const": "QUEUED",
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "status",
+    "poll_url"
+  ],
+  "title": "PlanningRunCreated",
+  "type": "object"
+}
