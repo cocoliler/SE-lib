@@ -1,23 +1,47 @@
 # 系统架构
-
+## 逻辑架构（实线当前，虚线后续）
 ```mermaid
 flowchart LR
- F[React Flow 三视图] -->|规格与命令| API[FastAPI]
- API --> S[Pydantic 契约]
- S --> P[Planner 服务]
- S --> O[LangGraph 固定主图]
- O --> A[角色注册与 Agent 适配]
- P --> M[DeepSeek / TEST]
- A --> M
- A --> T[权限化工具接口]
- P --> DB[(业务 SQLite)]
- O --> DB
+ U[本地工作台：规格 / 任务列表 / 工作流] --> API[FastAPI 应用服务]
+ API --> SPEC[Project / Spec 服务]
+ API --> PM[PM Agent]
+ PM --> LLM[LLM Provider：DeepSeek / TEST]
+ PM --> V[Schema 与语义规则检查]
+ API --> O[确定性 Orchestrator]
+ O --> V
+ SPEC --> DB[(SQLite / SQLAlchemy)]
  API --> DB
- DB -->|持久事件 SSE| F
+ API -.确认冻结计划 P2.-> EX[Agent Execution]
+ EX -.-> AR[Agent Registry 与受限工具]
+ EX -.-> AV[Artifact / Verification]
+ EX -.事件.-> MON[Execution Monitoring]
+ MON -.SSE.-> U
 ```
 
-一个 FastAPI 进程拥有调度和数据库写入。React Flow 只投影视图和编辑草稿。规格保存、规划命令、审批、取消与状态查询走 HTTP，状态变化由 SSE 推送。后端只绑定 loopback，校验来源和 Host，开发用 Vite 代理保持同源。API 不返回密钥。数据目录按实例锁避免并发启动；进程重启恢复业务数据与中断状态。
+## 当前作业 2 数据流
+```mermaid
+flowchart LR
+ S[Design Spec 表单或 JSON] --> N[标准化 / 保存 SpecRevision]
+ N --> P[PM Agent 生成 TaskProposal]
+ P --> Q{Schema / 引用 / DAG 校验}
+ Q -->|有界修复| P
+ Q -->|关键缺失| H[补充规格]
+ H --> N
+ Q -->|通过| O[Orchestrator 拓扑批次]
+ O --> UI[任务列表 / 可视化 / 覆盖报告]
+ UI -->|人工编辑| O
+ UI --> SAVE[确认假设 / 保存 PlanRevision]
+ SAVE --> HIST[历史 / JSON 导出]
+```
 
-前端现有技术和样式继续使用，模块为规格、画布、运行、验证。后端建议 `backend/app/{api,agents,orchestration,models,tools,persistence}`，生成契约放 `contracts/`，测试放 `tests/{unit,integration,e2e,live}`。典型调用使用独立 Agent 上下文，统一模型适配报告结构化输出、错误、request ID 和 usage。适配层与 LangGraph 不共享传输 DTO。
+## 运行时与部署
+Windows 浏览器 → Vite 开发代理或 FastAPI 静态前端 → 单 FastAPI 进程 → 本地 SQLite；仅 Provider 对外 HTTPS。
+后端只监听 127.0.0.1，限制 Host/Origin；生产静态前端同源，开发只允许指定 Vite 来源。不开放 LAN 登录/权限系统。
+PlanningRun 写 QUEUED 后由同进程有界队列单消费者领取；队列上限 10，超限 429。数据库持久化先于内存唤醒；进程中断按运行状态专篇显式失败，避免假装可靠任务队列。
+REST 创建命令和读快照；规划页每 1 秒轮询，后台标签降为 5 秒，终态停止。当前不需要 WebSocket/SSE。
+数据库短事务；模型网络调用不持有写锁。一个实例锁防止重复后端操作同一库。业务层依赖仓储接口，纯编排不读库。
 
-SQLite 只承载本地状态、快照、产物及事件。单进程 I/O 并发足够首版需求。工具注册含版本、参数 Schema、白名单、超时、大小上限、作用域和副作用分类。首版只读材料或纯计算，禁止 Shell、任意网络访问和任意写路径。对照[选型](TECH_STACK.md)、[数据契约](WORKFLOW_DATA_MODEL.md)与[编排算法](ORCHESTRATION_ENGINE.md)。
+## 状态与信任
+客户端图仅投影，服务端为业务事实源。规格/模型输出/导入文件均不可信：尺寸限制、严格 Schema、依赖验证，不执行其代码。
+前端无模型 Key；日志脱敏；模型只能得到本次规格/配置。规划和已有历史分离，断网不影响浏览保存。
+领域/模块边界见 [模块](MODULE_DESIGN.md)；技术取舍见 [选型](TECH_STACK.md)。

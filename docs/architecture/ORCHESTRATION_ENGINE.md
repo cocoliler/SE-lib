@@ -1,20 +1,55 @@
-# 多 Agent 编排器详细设计
+# 确定性编排器
+## 定位
+当前编排器是无模型、无数据库副作用的纯函数：
+build_plan(tasks, spec, policy) -> {edges,execution_stages,parallel_batches,ordered_task_ids,validation_report}。
+只有通过校验的结果可形成 PlanRevision。未来调度器消费冻结计划，见扩展架构；不在此混入 LangGraph 执行。
 
-| 方案 | 复杂度与恢复 | 调试与画布映射 |
-|---|---|---|
-| A 固定 LangGraph 主图 + 动态计划数据 | 一次编译，run 固定主图版本；业务层统一校验、审批和恢复边界 | 主图阶段稳定，用 task_id 把动态任务映射到用户画布 |
-| B 每次由计划生成执行图 | 每个版本需重新编译，恢复时须能重建完全一致的图；修订时管理更多拓扑版本 | 图较直观，然而编译节点与工具/审批节点仍需关联 |
+## 图语义和阶段
+每个 Task 为顶点，依赖 A→B 表示 B 必须等待 A。多个父节点为 AND 汇合。无条件、循环或 OR 分支。
+阶段是开发活动分类，拓扑层是依赖计算结果；阶段标签不隐式产生依赖。若提供跨阶段关系约束则必须满足，用户需改 stage 或依赖，不能通过布局修复。
+支持多个根/叶节点和独立组件；不要求全部任务从某个业务起点可达。孤立任务有规格/过程依据则合法，缺依据给警告；选定交付目标时才检查其祖先覆盖，不随意删除未关联任务。
 
-首版选 A。主图 load → dispatch → workers → collect → verify → review，按程序条件走 finish 或 repair_gate。用户画布是计划投影。第一轮串行联调和最终图复用同一任务契约。在 [Graph API](https://docs.langchain.com/oss/python/langgraph/graph-api) 中 Send 支持动态参数并行，将具体任务作为 worker 输入，按 attempt_id 归并通过校验的结果引用。
+## 算法伪代码
+```text
+build(tasks, spec, policy):
+  validate_sizes_and_schema()
+  id_map = unique_map(tasks.task_id)     # 重复立即返回带字段路径错误
+  indegree = {id: 0}; outgoing = {id: []}
+  for task in tasks:
+    validate_role_stage_category_and_requirement_refs(task)
+    seen = set()
+    for dep in task.dependencies:
+      reject missing / self / duplicate dependency
+      validate_allowed_stage_transition(dep, task)
+      outgoing[dep].append(task.id)
+      indegree[task.id] += 1
+    validate_inputs_and_deliverables(task, id_map) # task 输入须直接依赖
+  if errors: return invalid_report
+  frontier = sorted(all ids whose indegree == 0)
+  batches = []; count = 0
+  while frontier:
+    batch = frontier                     # 本轮集合冻结
+    batches.append(batch); count += len(batch)
+    next_frontier = []
+    for u in batch:
+      for v in outgoing[u]:
+        indegree[v] -= 1
+        if indegree[v] == 0: next_frontier.append(v)
+    frontier = sorted(next_frontier)
+  if count != len(tasks):
+    cycle = iterative_three_color_DFS(unprocessed_subgraph)
+    return CYCLE with actual cycle task_ids and edges
+  check_requirement_coverage_and_required_categories()
+  check_orphans_and_duplicate_titles_as_warnings()
+  return edges, group_by_stage(tasks), batches, flatten(batches), report
+```
 
-## 执行算法
+Kahn 未处理集合包含环的下游，不得全部标为“环上的节点”；三色 DFS 只报告回边及栈内实际环，UI 定位那组边。
+一个菱形：A→B、A→C、B→D、C→D，结果 [[A],[B,C],[D]]；不能把逐个入队序列误当并行批次。
+空任务（无阻断问题）非法；仅一个有据任务合法。
 
-1. 校验批准的快照，将任务写为 PENDING。编排器按拓扑和 task_id 稳定选取就绪任务：依赖全部 COMPLETED，required 输入在业务库可读并通过 Schema。
-2. 一条活动运行，每轮最多 2 项。事务领取任务并递增调用预算，建立 Attempt、generation 和输入引用清单；以 Send 调用 Agent，同轮汇聚后重新计算 READY。慢分支可延迟下一轮，首版接受。
-3. 同一 task_id 在一次 revision 只有一个活跃 attempt。成功先原子落成果、状态和事件，再返回引用给图；同键同 hash 幂等，异 hash 拒绝。失败标注分类和尝试次数，依赖任务 BLOCKED，允许独立分支收敛。若必需任务失败，本轮最终 FAILED，可查看部分成果。无就绪、无等待且仍有未完成任务为 DEADLOCK，终止。
-4. 全部必需任务完成后生成机器验证清单，Reviewer 审查冻结规格与引用。确定性失败不能被覆盖。pass 且检查通过才 COMPLETED。
-5. revise 时 Reviewer 指明 task_id、criterion_id 和证据。编排器仅支持一次定向修订，重做缺陷生产者和受影响下游，其他成果按 hash 复用。校验新 revision，人工批准后追加版本及新 Attempt，旧记录可查。拒绝、超时、不可修复或再次不合格即 FAILED。
-
-初始确认在启动前完成。运行内审批先以稳定键幂等写入业务审批对象，安全边界才调用 interrupt。P0 主图使用内存 checkpointer，thread_id 固定为 run_id。同进程批准后由唯一运行驱动器读取已提交决定，调用 Command(resume=decision)，恢复节点核对审批 ID 和目标 hash。可选 SQLite checkpointer 跨重启恢复在 P1 实验。[Interrupt 文档](https://docs.langchain.com/oss/python/langgraph/interrupts)说明恢复重进节点，故等待节点内不发模型请求或执行工具。
-
-首版上限：2–12 个任务、并发 2、30 次模型调用/100000 token 预算、请求超时 60 秒、活动运行截止 20 分钟、人工审批 24 小时。一轮临时错误最多再试一次，规划格式最多修复两次，修订最多一次。请求前原子预留额度；未知 usage 保留预留并标记未知。预算不因修订清零。工具不允许外部副作用，权限不足终止。
+## 复杂度与重建
+建图/Kahn/DFS O(V+E)，稳定排序使总上界 O(V log V + E)，空间 O(V+E)；引用及覆盖额外 O(R+I)，R 为需求数、I 为引用数。精确重复文本散列 O(文本总长)，不做全对全 LLM 比较。
+P0 上限 100 tasks/1000 edges；编辑后全量重算，避免增量缓存失效复杂度。前端立即检查连线错误，服务端最终全量检查。
+修改 task/依赖标 dirty，旧批次显示“待重新编排”。请求携草稿 hash，响应 hash 不匹配当前草稿则丢弃显示，避免慢请求覆盖新图。
+模型提出的顺序不是事实源；无耗时依据不显示关键路径时间。批次是静态依赖并行机会，不是资源调度承诺。

@@ -1,17 +1,17 @@
-# 可独立开发的任务
+# 可执行开发任务
+| 任务 | owner / 依赖 | 具体交付 | 完成标准 |
+|---|---|---|---|
+| T01 | A / 无 | 实现严格Pydantic，导出OpenAPI和TS；规划参数；错误常量 | 契约验证通过，未知字段拒绝；接口消费者Review；锁定Windows依赖 |
+| T02 | E / T01 | SQLite迁移、Project/SpecRevision仓储/API | A01–A03；CAS/事务回滚、空库及旧库升级 |
+| T03 | B / T01 | 紧凑规格入口、结构化需求编辑、JSON预览 | 缺必填定位；编辑不丢失；A02/A03 |
+| T04 | C / T01 | DeepSeek/Test Provider、PM Prompt、PlanningRun处理 | A04/A05/A12；空白/截断/超时/修复预算；不硬编码产品 |
+| T05 | D / T01 | 纯函数验证、阶段/输入引用、Kahn和实际环定位 | A06/A07；确定性输出和复杂度边界 |
+| T06 | B / T01/T05契约 | DTO适配、任务表、详情、覆盖与图投影 | A08；任务ID一致，布局不改依赖，错误可定位 |
+| T07 | E/B / T02/T04/T05/T06 | 编排/版本保存/历史/导出，前端冲突处理 | A09/A10；重复请求幂等，旧版不变，TEST来源不丢 |
+| T08 | F/C / T07 | 通用REAL规划验证、变异、故障和端到端；评分证据 | A01–A12+P0质量门槛；缺Key标阻断不伪造 |
+| T09 | B/A / P0闭环 | 撤销/折叠/差异和规划参数体验 | A13/A14；不改变业务图语义 |
+| T10 | C/D/E / Phase6 | 执行框架实验、角色能力与成果传递 | A15；计划与Run分离，受限工具和输入hash |
+| T11 | D/E/B/F / T10 | 运行监控、审批、取消、审查及新Run修订 | A16；状态一致和证据可复现 |
+| T12 | C/E / 用户需求 | 文档解析→待确认规格 | A17；缺信息标注、不能绕过Schema |
 
-任务所有者与里程碑见[开发路线图](ROADMAP.md)。每项一个可验收 PR，附命令与样例。T04 已有前端底座，以下补充为拟议工作。
-
-| 任务 | 主要工作区 | 接口交付 |
-|---|---|---|
-| T01/T02 A、F | docs | 审计、设计评审决定、边界及风险 |
-| T03 A、E | contracts、backend/app/persistence | Spec 与 Plan JSON、API 错误/事件样例、迁移 |
-| T04 B | frontend | 规格表单、兼容旧草稿、候选编辑与确认 |
-| T05 C | backend/app/agents、models | TEST/REAL 适配和角色 Schema |
-| T08 D、E、C | backend/app/orchestration、persistence | 依赖并行、真实产物与失败传播 |
-| T09 B、E | frontend、backend/app/api | 运行视图、快照、SSE |
-| T10 D | backend/app/orchestration | 人工控制、取消、重启标记和幂等 |
-| T11 C、D、B | agents、orchestration、frontend | 程序检查、审查、一次修订与验证视图 |
-| T12/T13 F、E | tests、scripts | 选课 fixture、证据、Windows 启动 |
-
-依赖和验收 ID 在路线图；交叉修改契约先同步生成件与 fixture。
+模块作者写本模块单测，F负责跨模块验收。B当前下一步优先T03和T06，不能等待其他人完成才做接口适配；使用标明TEST的契约fixture并等待真实API替换。

@@ -1,31 +1,52 @@
-# 业务数据库
+# 数据库设计
+SQLite + SQLAlchemy + Alembic，foreign_keys=ON，WAL，busy_timeout=5000ms。短事务，模型调用在事务外。时间 UTC；UUID 存 TEXT；JSON 需应用 Schema 验证和 json_valid 检查。
 
-SQLite 与 SQLAlchemy/Alembic。连接启用 foreign_keys、WAL 和短事务，网络调用在事务外。schema_version 通过迁移管理，API 契约见[工作流数据](WORKFLOW_DATA_MODEL.md)。
-
-| 表 | 键与约束 |
+## 当前表与约束
+| 表 | 关键列与约束 / 索引 |
 |---|---|
-| specs / spec_revisions | spec_id 与不可变 revision，唯一组合，JSON 规格 |
-| plans / plan_revisions | plan_id 与 revision 唯一，绑定 spec_revision_id，包含 hash 与定义 JSON |
-| runs | id、plan_revision_id、active_revision_id、graph_version、mode、status、generation、last_seq、预算与时间 |
-| task_runs / attempts | (run_id,revision_id,task_id) 唯一，attempt_number 唯一于 task_run；记录输入清单、角色版本和耗时 |
-| artifacts / reviews | 成果 attempt FK 与 hash，审查 run/revision FK、verdict、证据与缺陷 |
-| events / messages | (run_id,seq) 复合主键；消息按 message_id 去重 |
-| approvals / commands | 审批状态与 hash 的 CAS；命令按 scope/key 唯一，保存 request_hash 与结果 |
-| tool_operations | operation_key 唯一，attempt FK、tool_id、状态、脱敏参数摘要 |
-| layouts | plan_revision_id、坐标、注释和 viewport，与计划定义分离 |
+| projects | id PK, name, archived_at, created_at |
+| specs | id PK, project_id FK UNIQUE, latest_revision |
+| spec_revisions | id PK, spec_id FK, revision, content_json, hash, created_at；UNIQUE(spec_id,revision) |
+| planning_runs | id PK, spec_revision_id FK, status CHECK, mode CHECK, config_json, proposal_json?, error_json?, usage_json?, attempt_count, created_at；索引(status,created_at) |
+| planning_attempts | (planning_run_id,attempt_no) PK, request_hash, response_json/text, usage_json, error_json, timestamps；不保存 Key |
+| plans | id PK, project_id FK, latest_revision |
+| plan_revisions | id PK, plan_id FK, revision, spec_revision_id FK, planning_run_id FK nullable, parent_revision_id FK nullable, policy_json, source, origin_mode, confirmed_assumption_ids_json, hash, created_at；UNIQUE(plan_id,revision) |
+| tasks | (revision_id,task_id) PK, name,description,category,stage,priority,assigned_role, rationale, effort_json?；按 revision_id/stage 索引 |
+| task_dependencies | (revision_id,source_task_id,target_task_id) PK；两端复合 FK → tasks；CHECK source≠target |
+| task_details | (revision_id,task_id) PK/FK, inputs_json,deliverables_json,acceptance_json,requirement_ids_json,assumptions_json；一对一结构化详情 |
+| plan_derivations | revision_id PK/FK, stages_json,batches_json,order_json,report_json,rules_version；派生缓存 |
+| layouts | plan_revision_id PK/FK, revision, positions_json,notes_json,viewport_json |
+| commands | (scope,idempotency_key) PK, request_hash,result_json,created_at；持久重试去重 |
 
-状态、审批、成果、消息与相应可见事件同事务提交。领取通过条件更新避免双发，使用 generation 阻止终态后写回。索引按 run/status、revision 与事件顺序查询。数据库可独立导出脱敏证据。重启只恢复可读历史和失效标记，持久 checkpoint 后置。备份使用 SQLite backup，恢复后检查完整性，数据库文件不入 Git。
+任务和依赖单独关系表，以数据库约束保护引用；规格、规划配置和任务内部短数组使用 JSON，避免每条字符串都建表，也不把整个系统塞进一个 JSON。
+完整候选 proposal_json 保留模型输出审计；正式任务从规范化表读取，候选不是第二个可编辑事实源。
 
+## 保存事务
+校验在事务外计算候选及 input_hash；事务内重查 spec 存在及配置合法、比较 expected_revision，插入快照、tasks/details、dependencies、derivations、layout 与 command，再 CAS 更新 head。
+所有成功或全部回滚；UNIQUE 防并发同版本。409 返回 current_revision；数据库忙超过 5 秒返回 503 STORAGE_BUSY，不报告保存成功。
+项目与规格归档不级联删除历史。P0 无硬删除接口。plan 与 spec 必须属于同 project，由服务校验。
+任务依赖复合 FK 保证不能跨版本引用。环/需求 JSON 引用由纯验证器负责；库约束不能替代业务检查。
+
+## ER
 ```mermaid
 erDiagram
- SPEC_REVISION ||--o{ PLAN_REVISION : informs
- PLAN_REVISION ||--o{ RUN : anchors
- RUN ||--o{ TASK_RUN : contains
- TASK_RUN ||--o{ ATTEMPT : tries
- ATTEMPT ||--o{ ARTIFACT : produces
- ATTEMPT ||--o{ TOOL_OPERATION : audits
- RUN ||--o{ REVIEW : assesses
- RUN ||--o{ MESSAGE : sends
- RUN ||--o{ EVENT : publishes
- RUN ||--o{ APPROVAL : gates
+ PROJECT ||--|| DESIGN_SPEC : owns
+ DESIGN_SPEC ||--o{ SPEC_REVISION : versions
+ SPEC_REVISION ||--o{ PLANNING_RUN : informs
+ PLANNING_RUN ||--o{ PLANNING_ATTEMPT : attempts
+ PROJECT ||--o{ WORKFLOW_PLAN : owns
+ WORKFLOW_PLAN ||--o{ PLAN_REVISION : versions
+ SPEC_REVISION ||--o{ PLAN_REVISION : sources
+ PLANNING_RUN o|--o{ PLAN_REVISION : proposes
+ PLAN_REVISION ||--|{ TASK : contains
+ TASK ||--|| TASK_DETAIL : describes
+ PLAN_REVISION ||--o{ TASK_DEPENDENCY : relates
+ PLAN_REVISION ||--|| PLAN_DERIVATION : derives
+ PLAN_REVISION ||--o| LAYOUT : displays
 ```
+
+## 迁移与恢复
+每次模型/索引变化单独 Alembic revision；测试空库升级和上一版本升级；发布前 SQLite backup API 备份，不能只复制活跃 WAL 主文件。
+生产失败恢复备份，不承诺所有降级脚本可保留新数据。数据库、密钥和日志不提交 Git。
+启动检测版本与完整性；旧 CLI 库独立保留，不能原地解释为新 Schema。
+P2 新增 runs/task_runs/attempts/artifacts/events/approvals；规划表不迁移成执行表。

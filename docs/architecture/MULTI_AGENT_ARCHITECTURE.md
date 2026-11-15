@@ -1,31 +1,14 @@
-# 多 Agent 角色与协作
+# Agent 职责与扩展
+当前 P0 只有独立 PM Agent，职责详见 [PM 设计](PM_AGENT_DESIGN.md)。Orchestrator 不用模型，是独立确定性模块。
+最终多 Agent 为 P2，详见 [扩展契约](SE_WORKFLOW_EXTENSION.md)。本篇仅定义角色职责，避免重复数据模型。
 
-| 内置角色 | 输入和上下文 | 成果 Schema | 工具 |
+| 可配置角色示例 | 输入 | 输出 | 边界 |
 |---|---|---|---|
-| Planner | 固定规格、能力目录、计划约束 | PlanRevision 候选 | 无 |
-| Research | 规格、明确授权的项目材料 | constraints、assumptions、findings、source_refs | 允许的本地材料只读 |
-| Architect | Research artifact、规格 | modules、schema、api、decisions | JSON 校验 |
-| Planning | 架构与规格 | development_tasks、dependencies、criterion_refs | JSON 校验 |
-| TestDesign | 架构与规格 | cases、criterion_refs、expected_results | JSON 校验 |
-| Reviewer | 规格、各成果和机器检查 | verdict、findings、evidence_refs | JSON 校验 |
+| PM | 规格+可选规划参数 | TaskProposal | 不写库、不决定合法性 |
+| Architect | 规格+架构任务 | 架构决策/接口成果 | 不自行新增范围 |
+| Developer | 明确任务+上游成果 | 代码或实现成果 | 只能用批准工具/工作区 |
+| QA | 验收条件+代码成果 | 测试结果与证据 | 未运行测试不得声称通过 |
+| Reviewer | 规格+成果+机器检查 | 缺陷/修订建议 | 不能覆盖确定失败 |
 
-AgentRegistry 用角色 ID 与版本注册预设，配置独立 system_prompt、model_profile_ref、input_schema、output_schema、allowed_tools、max_steps 和上下文预算。运行冻结配置，不含 API Key。多个角色可共享 DeepSeek 连接。Agent 仅见当前任务、设计规格必要片段和绑定成果。工具输出按不可信输入处理，不能更改提示权限。没有检索工具时 Research 标明材料来源与未验证假设。
-
-Planner 提出分工，编排器核对角色能力后派发。专职 Supervisor 和 Writer 无首版必要。交接时由编排器接受生产成果，验证引用并向接收角色发任务委派，接收方的 Attempt 清单证明实际消费；当期不实现任意控制权转移。Reviewer 的缺陷交回对应角色，批准后才运行。消息、依赖、成果、工具操作及状态事件分开记录，见[通信协议](AGENT_COMMUNICATION.md)。
-
-```mermaid
-sequenceDiagram
- participant P as Planner
- participant O as Orchestrator
- participant R as Research
- participant A as Architect
- participant U as Reviewer
- P->>O: 候选图与角色建议
- O->>R: 委派已确认任务
- R->>O: 产物引用与证据
- O->>A: 委派与已解析的上游字段
- A->>O: 架构和接口成果
- O->>U: 规格、机器报告及成果
- U->>O: 缺陷与建议
- Note over O,A: 用户批准后定向修订
-```
+角色 ID 来自注册表；一个任务与角色绑定不代表一个长期聊天进程。上下文按任务输入最小化，历史只传需要的产物引用。
+不采用无界 Agent 互聊、自动无限返工或大模型唯一调度；所有调用预算、验证、终止由应用服务控制。

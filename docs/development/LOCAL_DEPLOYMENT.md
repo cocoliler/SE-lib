@@ -1,11 +1,18 @@
-# Windows 本地运行
+# Windows 本地开发与运行
+## 当前确实可运行的部分
+现有仓库前端，要求Node满足frontend/package.json（当前≥22.12.0），不在本轮升级：
+```powershell
+Set-Location D:\Program01\TW1\frontend
+npm ci
+npm run dev
+```
+生产构建 npm run build；浏览器访问Vite输出地址。当前是TEST固定示例画布，不能描述为已接上PM后端。
+独立CLI分支不是main网页服务；本地prototype缓存不构成运行入口。
 
-目前 main 可运行前端。Node 22.12 或兼容版本，PowerShell 在仓库根目录执行 `npm --prefix frontend ci` 与 `npm --prefix frontend run dev`；地址由 Vite 输出。独立原型分支可用 `python prototype/flowstudio.py` 执行 TEST。正式网页后端命令以下为计划。
-
-1. Phase 2 在 Windows 验证并锁定 Python、Node、依赖和 SQLite 版本。通过 `py -m venv .venv` 建环境，使用虚拟环境解释器从锁文件安装。
-2. 开发用 `powershell -File scripts/dev.ps1` 启动 loopback FastAPI 与 Vite。Vite 代理 /api。脚本报告端口冲突和健康状态，退出回收所属进程。
-3. 构建用 `npm --prefix frontend run build`。交付脚本 `scripts/start.ps1` 启动单进程，后端提供静态构建和 API。
-4. REAL 用后端环境变量 `DEEPSEEK_API_KEY`，可选 `DEEPSEEK_MODEL`。凭据不响应给浏览器、不入 Git，日志去除授权头和敏感字段。无 Key 可启动 TEST 或阅读记录。联网仅在启用真实模型时发生。
-5. 数据目录 `.flowstudio/` Git 忽略，SQLite 本机磁盘。运行启动检查版本和锁，迁移前备份，停止进程后恢复备份并完整性检查。并发、超时和调用额度见[编排引擎](../architecture/ORCHESTRATION_ENGINE.md)。
-
-Windows 验收用全新 checkout，运行两条模式、重启查询历史、验证 Key 未进产物和错误日志。禁止 Docker、Redis、Kafka、消息总线、云数据库及集群。
+## 后端目标方案（尚未实施，不是现成命令）
+选定兼容Python版本后建立backend虚拟环境和锁文件，安装FastAPI/Pydantic/SQLAlchemy/Alembic/模型客户端；
+应用入口约定backend/app/main.py，开发命令计划为python -m uvicorn app.main:app --host 127.0.0.1 --port 8000（从backend目录启动）。
+Vite /api代理到8000；生产由FastAPI提供静态dist，保持同源。不需要Docker/Redis/云数据库。
+数据目录.flowstudio，默认文件flowstudio.db；启动持有实例锁并执行迁移版本检查。更新前备份，恢复后integrity_check。
+API Key经后端环境变量DEEPSEEK_API_KEY读取；.env不入Git、不下发前端；模型实际ID配置单独保存，不能随文档假定某个ID永久可用。
+无Key时仍可编辑/读历史和显式TEST，REAL显示配置错误。Windows后端安装、路径/编码、代理及离线行为由Phase1/6验收。

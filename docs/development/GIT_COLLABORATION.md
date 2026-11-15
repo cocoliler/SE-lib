@@ -1,12 +1,15 @@
-# Git团队协作
+# Git 协作规范
+main保持可构建。每个短分支只做一个可验收任务；建议codex/b/T06-workflow（自动化协作）或团队约定feature/b/T06-workflow。不维护六条长期个人分支。
+提交采用Conventional Commits并用中文说明，如 feat(spec): 增加规格版本保存、docs(architecture): 区分规划与执行。
+提交只添加明确文件；不提交.env、数据库、缓存、node_modules、.tmp或用户上传文件。真实操作者身份提交，不伪造队友贡献。
 
-团队调整为六人，职责、评审与分支规则以[六人分工](TEAM_ASSIGNMENTS.md)为准。仓库已初始化为main，尚未创建提交或配置远端；下文关于未初始化的描述为此前设计阶段记录。
-仓库已有 main 和任务分支。后续按[路线图](ROADMAP.md)逐项开任务分支，使用中文提交描述。
+## PR
+描述包括：解决的问题、用户行为变化、需求/任务编号、契约或迁移影响、验证命令与结果、截图（UI）、未验证边界。
+至少一名非作者Review；Schema/API由A与消费者共同评审，数据库由E评审，图规则由D评审。
+合并前构建与相关测试通过，使用squash保持一个可回滚单元。数据库改动包含迁移与回退/备份说明。
+冲突先同步main，不能以覆盖他人改动消除冲突。共享文件指定owner，通过小PR修改。
 
-模块目录为 frontend、backend/app 下的 api、agents、orchestration、models、tools、persistence，以及 contracts、tests、scripts 和 docs。六人现有职责继续适用。五人时 A 兼 F；四人时 A 兼 F、D 兼 E；三人时 A 兼 C、B 兼 F、D 兼 E。接口变更由前后端互审，测试或迁移必须由非作者复核。
-
-main保持可运行，feature/Txx-description短分支，1任务1PR，合并后删除；禁止多人共享长分支或直接推main。契约/状态/数据库变更至少一名后端与前端共同审查，其他变更一名非作者审查。数据库迁移唯一编号，已合并迁移不改写；生成的契约与源同PR。
-
-PR模板：问题与行为变化；关联任务/设计决策；契约与迁移影响；测试结果；UI截图（若相关）；恢复/回滚步骤；已知限制。锁文件提交，API Key、.env、.flowstudio、日志、数据库和本机凭据不提交；.env.example只留占位值。
-
-CI：Python lint/type/unit/integration，前端lint/type/unit/build，契约生成差异，Playwright关键流程；Windows runner覆盖SQLite/启动/路径边界。REAL测试只在受控密钥环境人工触发，不在fork PR暴露凭据。分支冲突先更新main再本地解决；状态枚举冲突由契约owner统一，禁止简单择一覆盖。
+## 3–5人兼任与现有六人
+六人仍为A架构/契约、B前端、C PM、D编排、E后端数据、F测试。
+5人合并A/F，4人合并A/E与D/F，3人分为A/D/E、B、C/F；每个模块仍有唯一owner，跨模块Review不可省略。
+设计文档的维护职责见[团队分工](TEAM_ASSIGNMENTS.md)。

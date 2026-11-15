@@ -1,14 +1,17 @@
-# 技术选型
+# 技术选型与决策依据
+所有版本在实施时锁定兼容集；当前 frontend/package-lock.json 已有 React19/React Flow12/Vite7 系列依赖，不为文档强制升级。
 
-| 采用或评估 | 理由 |
-|---|---|
-| React + TypeScript + Vite + React Flow | main 已可构建。沿用已有 CSS，Tailwind 和 shadcn/ui 待组件复用需要时评估 |
-| Python + FastAPI + Pydantic | 接续 Python 原型，提供共享契约、校验和 HTTP/SSE |
-| LangGraph 固定主图 | 并行和汇聚用 Send/reducer，业务调度与状态由确定性规则控制，详见[取舍](ORCHESTRATION_ENGINE.md) |
-| LangChain 可选 | 模型适配器隔离供应商。若原生接口已满足 JSON 与用量信息，可不引入完整依赖 |
-| DeepSeek | REAL 可配置模型连接，TEST 使用独立适配器。严格校验模型返回 |
-| SQLite + SQLAlchemy + Alembic | 单机事务和持久化，版本化业务表设计 |
-| SQLite Checkpointer 后置 | 首版同进程人工确认，持久业务数据先满足审计。跨重启续跑要处理版本、幂等、副作用和断点对账 |
-| SSE | 单向事件，控制命令用 HTTP；阶段性轮询辅助联调。不引入 WebSocket 双向会话管理 |
+| 领域 | 比较 | 结论与触发条件 |
+|---|---|---|
+| 前端 | 现有 React/TS/Vite vs 重建 Next.js | 保留现有，不需要SSR |
+| 画布 | React Flow vs 自绘Canvas | 保留前者交互基础；业务图独立 |
+| UI | 现有CSS vs Tailwind+shadcn/ui | P0统一CSS tokens复用现有；新增复杂可访问组件再评估局部引入，避免全量重写 |
+| 布局 | 现有拓扑分层 vs Dagre/ELK | P0分层；跨组连线/大图测量不达标时做候选实验 |
+| 后端 | FastAPI vs 大型服务框架 | FastAPI+Pydantic，契约清晰、本地单体 |
+| LLM | 直接Provider适配 vs LangChain | P0直接适配，结构化Schema和预算自主控制；多供应商复杂度上升才考虑LangChain |
+| 编排 | Python纯函数 vs LangGraph | P0纯函数；P2对持久等待/调度做框架实验 |
+| 存储 | SQLite/SQLAlchemy vs PostgreSQL | 本地单用户选择SQLite、迁移用Alembic，不引入外部DB |
+| 实时 | REST轮询 vs SSE vs WebSocket | P0轮询；P2单向运行事件用SSE；无实时多人协作，不选WebSocket |
+| 工程 | 单体 vs 微服务/队列 | 单进程、持久PlanningRun+有界队列；中断显式失败，不引入Redis/Docker |
 
-参考证据见[研究报告](../research/REFERENCE_PROJECTS.md)。依赖版本与 Windows 支持需 Phase 2 实测锁定，正式后端当前未实现。
+证据见 [研究](../research/REFERENCE_PROJECTS.md)。SQLite/Python后端尚未实际搭建，Windows依赖组合由T01实验确认；不能把推荐写成兼容认证。
