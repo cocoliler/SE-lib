@@ -12,10 +12,13 @@ tech/
   artifacts/                 # JSON Schema、OpenAPI、样例、哈希清单
   scripts/export_contracts.py
   docs/                      # 系统架构与技术选型
+backend/
+  flowstudio_orchestration/  # 确定性编排器（T05，纯函数，只依赖契约）
+  tests/                     # 编排器单元测试（python -m unittest）
 docs/                        # 产品、交互、实施、验收及设计参考
 ```
 
-集成基线和当前交付状态见[实现审计](../PROJECT_AUDIT.md)。后端实现落地后再增加 `backend/`，含 FastAPI 入口、应用用例、PM 和编排模块、仓储及迁移。旧 CLI 原型位于独立分支。
+集成基线和当前交付状态见[实现审计](../PROJECT_AUDIT.md)。`backend/` 目前只有编排模块；FastAPI 入口、应用用例、PM 与仓储随 T02/T04/T07 落地，届时再补 `app/`、迁移与锁文件。旧 CLI 原型位于独立分支。
 
 ## 契约变更与协作
 

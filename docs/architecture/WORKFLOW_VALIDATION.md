@@ -25,3 +25,13 @@ path 使用 JSON Pointer，例如 /tasks/2/dependencies/0。报告绑定 input_h
 validation.valid 仅指 errors=[]；warnings 可存在。缺陷位置、字段名可定位，错误不只写“规划失败”。
 结构/图/输入引用失败不可用户强制忽略。语义合理性以人工评审记录体现，不让模型评分覆盖硬错误。
 规则用版本化纯函数注册表 {rule_id,version,severity,check}，规划参数仅配置已注册规则及参数，不执行导入字符串。
+
+## 实现补充与已知缺口（T05）
+
+- 规则顺序固定为结构 → 图（Kahn/环）→ 覆盖 → 告警；结构或环失败时派生结果为空且 `valid=false`。
+- 跨任务假设 ID 唯一由编排器检查；契约无专用码，复用 `DUPLICATE_ID` 指向 `/tasks/{i}/assumptions/{j}/id`。
+- 已知缺口一：should/could 需求未被引用时设计只要求 warning，但 `Issue` 只允许
+  `POSSIBLE_DUPLICATE`/`ORPHAN` 作为 warning。当前只写入 `coverage.uncovered_ids`，不伪造 warning；
+  补码需修改 T01 契约并重新生成产物。
+- 已知缺口二：超过 100 任务/1000 依赖没有对应 IssueCode，实现抛 `OrchestrationLimitError`（limit/actual），
+  由 API 映射 422，不用错误码硬凑报告。

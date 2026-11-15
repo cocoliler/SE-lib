@@ -53,3 +53,18 @@ Kahn 未处理集合包含环的下游，不得全部标为“环上的节点”
 P0 上限 100 tasks/1000 edges；编辑后全量重算，避免增量缓存失效复杂度。前端立即检查连线错误，服务端最终全量检查。
 修改 task/依赖标 dirty，旧批次显示“待重新编排”。请求携草稿 hash，响应 hash 不匹配当前草稿则丢弃显示，避免慢请求覆盖新图。
 模型提出的顺序不是事实源；无耗时依据不显示关键路径时间。批次是静态依赖并行机会，不是资源调度承诺。
+
+## 实现映射（T05 已交付，2026-11-15）
+
+代码在 `backend/flowstudio_orchestration/`，只依赖 T01 契约，不导入 FastAPI、ORM 或 LLM SDK。
+
+- 入口：`build_plan(tasks, spec, policy) -> PlanDerivation`；`validate_workflow(...) -> ValidationReport`
+  复用同一份实现，`/workflow-validations` 不需要第二套规则。
+- 规则：`rules.py` 按结构 → 图 → 覆盖 → 告警注册纯函数，规则 id 与 `rules_version` 一起进入报告。
+- 哈希：`input_hash` 取规格内容、任务、规划约束快照与规则版本的规范化 SHA-256，不含数据库 ID、时间与布局。
+  它与 `artifacts/examples/plan-derivation.json` 的样例哈希不同，因为样例只散列了规格。
+- 规模：空任务由请求契约（`min_length=1`）拒绝；超过 100 任务 / 1000 依赖抛 `OrchestrationLimitError`
+  （带 limit/actual），由 API 映射 422，报告里不伪造错误码。
+- 无效输入：返回空 edges/stages/batches/order 与 `valid=false`，不返回部分批次，避免前端误用。
+- 验收：`cd backend && python -m unittest discover -s tests -v`（53 项）；官方样例的边/阶段/批次/顺序与
+  `examples/plan-derivation.json` 一致；100 任务/1000 边实测 p95≈3.9ms（Linux，Python 3.12，非 Windows 基准）。

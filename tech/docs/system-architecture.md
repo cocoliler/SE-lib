@@ -831,9 +831,10 @@ python tech/scripts/export_contracts.py --check
 
 前端分支支持手动或导入 TaskProposal，浏览器进行覆盖、依赖、关键假设等预检并生成拓扑批次。规格、草稿及历史快照可保存到浏览器。会议室预约是显式 PRESET，正式 PlanningRun 仍由后端提供。当前前端证据见[实现审计](../../docs/PROJECT_AUDIT.md)。
 
-- **已完成**：契约与生成物、契约测试（含"文档端点表 == OpenAPI 端点"的自动比对）、`ErrorEnvelope` 结构。
-- **未完成**：FastAPI 路由、事务/CAS 落库、幂等键存储、Host/Origin 校验、静态前端托管、
-  PM Agent 实现与 T05 服务端权威编排。
+- **已完成**：契约与生成物、契约测试（含"文档端点表 == OpenAPI 端点"的自动比对）、`ErrorEnvelope` 结构；
+  T05 确定性编排器纯函数模块（`backend/flowstudio_orchestration/`，53 项 unittest，见第 7、8 节）。
+- **未完成**：FastAPI 路由（含 `/orchestrations`、`/workflow-validations` 接线）、事务/CAS 落库、
+  幂等键存储、Host/Origin 校验、静态前端托管、PM Agent 实现。
 - **约定**：T02 落地后必须用真实 `app.openapi()` 与 `tech/artifacts/openapi.json` 比对，
   差异以契约为准修改路由；不得反过来手改该产物。
 

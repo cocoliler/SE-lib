@@ -15,7 +15,7 @@ FlowStudio 是通用可定制的智能软件工程工作流平台（Configurable
 | 范围 | 当前可用 | 课堂闭环的后续目标 |
 |---|---|---|
 | 规格和任务 | 空项目、结构化规格、手动任务、JSON 导入/导出；可显式创建「会议室预约」演示项目 | 项目与不可变 SpecRevision；PM Agent 根据用户规格产生 TaskProposal，支持 REAL 与显式 TEST |
-| 校验和编排 | 浏览器校验依赖、引用、覆盖和假设，计算拓扑层与并行批次 | 确定性服务端编排器生成 PlanDerivation 和 ValidationReport |
+| 校验和编排 | 浏览器校验依赖、引用、覆盖和假设并计算批次；服务端纯函数编排器（T05）已能生成 PlanDerivation 与 ValidationReport，尚未接 HTTP | 确定性服务端编排器生成 PlanDerivation 和 ValidationReport，并由 API 正式接入 |
 | 可视化和保存 | React Flow 编辑、浏览器保存与只读本地快照 | 不可变 PlanRevision、独立 Layout、版本冲突处理和正式导出包 |
 | 执行与监督 | 画布表达任务计划、依赖和建议角色 | P2 增加实际任务执行、成果、审查与监督；Run 和 PlanningRun 各自维护状态 |
 
