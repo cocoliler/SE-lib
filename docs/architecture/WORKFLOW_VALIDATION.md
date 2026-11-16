@@ -35,3 +35,13 @@ validation.valid 仅指 errors=[]；warnings 可存在。缺陷位置、字段�
   补码需修改 T01 契约并重新生成产物。
 - 已知缺口二：超过 100 任务/1000 依赖没有对应 IssueCode，实现抛 `OrchestrationLimitError`（limit/actual），
   由 API 映射 422，不用错误码硬凑报告。
+
+## 与 HTTP 错误信封的关系（E 实现）
+- `Issue.code` 只能是上表 `IssueCode`；错误信封的 `error.code` 用更宽的 `ErrorCode`。
+  因此 `REVISION_CONFLICT`、`IDEMPOTENCY_CONFLICT`、`RESULT_NOT_READY`、`QUEUE_FULL`、`STORAGE_BUSY`
+  只出现在信封层，`issues` 为空数组，不伪装成校验问题。
+- 请求模型解析失败（未知字段、长度、枚举、tasks 为空、需求 ID 重复）返回 422 VALIDATION_FAILED，
+  字段路径写入 message；此类错误不进入编排器，也不占用幂等键。
+- 保存计划时执行同一套 `build_plan`；`report.valid=false` 直接 422 并回传 errors。不新增
+  `EMPTY_PLAN`/`PLAN_TOO_LARGE`/`SCHEMA_INVALID` 等契约外字符串，避免第二套错误码。
+- 编排器缺码两处保持 T05 的处理：只写 `coverage` 或由 API 映射 422；补码需 T01 修改契约并重新生成产物。

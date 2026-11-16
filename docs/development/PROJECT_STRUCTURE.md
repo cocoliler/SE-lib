@@ -13,12 +13,18 @@ tech/
   scripts/export_contracts.py
   docs/                      # 系统架构与技术选型
 backend/
+  app/                       # FastAPI 入口、api/application/domain/persistence/providers
+  migrations/                # Alembic 迁移（首个 revision 建全部表）
+  tests/                     # T05 编排器 unittest + 本目录 api/ 下的 pytest 集成测试
+  tools/export_openapi.py    # 与 tech 操作表比对，检测路由/响应漂移
+  fixtures/                  # TEST 模式 fixture（文件名即 fixture_id）
+  scripts/                   # dev.ps1 / start.ps1
+  requirements.txt, alembic.ini, .env.example
   flowstudio_orchestration/  # 确定性编排器（T05，纯函数，只依赖契约）
-  tests/                     # 编排器单元测试（python -m unittest）
 docs/                        # 产品、交互、实施、验收及设计参考
 ```
 
-集成基线和当前交付状态见[实现审计](../PROJECT_AUDIT.md)。`backend/` 目前只有编排模块；FastAPI 入口、应用用例、PM 与仓储随 T02/T04/T07 落地，届时再补 `app/`、迁移与锁文件。旧 CLI 原型位于独立分支。
+集成基线和当前交付状态见[实现审计](../PROJECT_AUDIT.md)。`backend/` 已包含 T02/T07 的 FastAPI 入口、应用用例与仓储；模型调用端口留给 T04，REAL 未配置时显式失败。旧 CLI 原型位于独立分支。
 
 ## 契约变更与协作
 
