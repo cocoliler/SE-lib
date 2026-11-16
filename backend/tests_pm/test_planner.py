@@ -230,6 +230,22 @@ class PlannerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.usage.total_tokens, 45)
         self.assertIs(result.diagnostics[-1].error_code, RunFailureCode.MODEL_TIMEOUT)
 
+    async def test_late_attempt_with_live_run_deadline_is_still_timeout(self):
+        clock = Clock()
+
+        def too_late():
+            clock.now += 61
+            return ProviderResponse(CANDIDATE, USAGE)
+
+        provider = SequenceProvider(too_late)
+        result = await self.run_plan(provider, clock=clock)
+        self.assertIs(result.kind, ProposalKind.FAILED)
+        self.assertIs(result.error.code, RunFailureCode.MODEL_TIMEOUT)
+        self.assertEqual(result.attempt_count, 1)
+        self.assertEqual(result.usage, USAGE)
+        self.assertEqual(result.diagnostics[0].elapsed_seconds, 61)
+        self.assertIsNone(result.proposal)
+
     async def test_local_processing_deadline_blocks_initial_or_final_result(self):
         clock = Clock()
         def consuming_estimator(_):

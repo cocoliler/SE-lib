@@ -175,18 +175,19 @@ async def generate_proposal(
             if _message_bytes(messages) > MAX_BODY_BYTES:
                 raise BudgetError(RunFailureCode.MODEL_BUDGET, "规划输入超出消息大小上限")
             prompt_hash = prompt.hash
-            started = monotonic()
             reserved, timeout = budget.reserve(estimate_input_tokens(messages), output_tokens, limits)
         except BudgetError as error:
             return result(error=_run_error(error.code, str(error), last_request_id))
         except (TypeError, ValueError):
             return result(error=_run_error(RunFailureCode.INTERNAL_ERROR, "无法计算规划输入预算"))
 
+        started = monotonic()
+        request_timeout = asyncio.timeout(timeout)
         response = None
         failure = None
         attempt_error = None
         try:
-            async with asyncio.timeout(timeout):
+            async with request_timeout:
                 response = await provider.complete_json(
                     messages=messages, model=model, max_tokens=output_tokens, timeout_seconds=timeout
                 )
@@ -197,6 +198,7 @@ async def generate_proposal(
         except Exception:
             attempt_error = _run_error(RunFailureCode.INTERNAL_ERROR, "模型 Provider 调用异常")
 
+        request_late = request_timeout.expired() or monotonic() - started >= timeout
         request_id = response.request_id if response is not None else failure.request_id if failure is not None else None
         actual_usage = response.usage if response is not None else failure.usage if failure is not None else None
         accounted, usage_unknown = budget.settle(reserved, actual_usage)
@@ -205,6 +207,8 @@ async def generate_proposal(
         try:
             budget.check_deadline()
             budget.check_accounted_tokens()
+            if request_late:
+                raise BudgetError(RunFailureCode.MODEL_TIMEOUT, '模型请求已达到单次截止时间')
             if failure is not None:
                 attempt_error = _run_error(_PROVIDER_CODES[failure.kind], str(failure), request_id)
             elif response is not None:
