@@ -124,6 +124,18 @@ class CriticalAssumptionTests(unittest.TestCase):
         self.assertEqual(len(blocked.blocking_questions), MAX_BLOCKING_QUESTIONS)
         self.assertEqual(with_blocking_questions(blocked), blocked)
 
+    def test_split_prioritizes_long_text_when_only_one_question_can_fit_it(self):
+        text = "假" * 80
+        self.payload["tasks"][0]["assumptions"][0]["text"] = text
+        self.payload["blocking_questions"] = [
+            f"{i:02d}" + "问" * 1998 for i in range(MAX_BLOCKING_QUESTIONS - 2)
+        ] + ["可" * 1950, "待" * 1900]
+        proposal = TaskProposal.model_validate(self.payload)
+        blocked = with_blocking_questions(proposal)
+        self.assertIn("A-01", blocked.blocking_questions[-2])
+        self.assertIn(text, blocked.blocking_questions[-1])
+        self.assertEqual(with_blocking_questions(blocked), blocked)
+
     def test_max_length_critical_assumption_keeps_its_full_text(self):
         text = "假" * 2000
         self.payload["tasks"][0]["assumptions"][0]["text"] = text

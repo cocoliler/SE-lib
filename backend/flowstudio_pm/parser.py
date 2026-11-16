@@ -159,8 +159,9 @@ def with_blocking_questions(proposal: TaskProposal) -> TaskProposal:
                 continue
             if _add_question(questions, question):
                 continue
-            # 组合问句放不下时，分别寻找仍可容纳引用或完整正文的条目。
-            if not (_add_question(questions, reference) and _add_question(questions, assumption.text)):
+            # 组合问句放不下时先追加较长项，避免短项占走唯一的大空位。
+            longer, shorter = sorted((reference, assumption.text), key=len, reverse=True)
+            if not (_add_question(questions, longer) and _add_question(questions, shorter)):
                 raise ProposalError(
                     RunFailureCode.MODEL_SCHEMA,
                     "阻塞问题已达契约上限，无法完整表达所有关键假设",
