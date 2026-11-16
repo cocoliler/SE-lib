@@ -127,8 +127,8 @@ def _message_bytes(messages: Sequence[Message]) -> int:
 
 
 def estimate_input_tokens(messages: Sequence[Message]) -> int:
-    """用 UTF-8 消息字节及每条消息的固定开销做保守估算。"""
-    return _message_bytes(messages) + 8 * len(messages)
+    """保守计算模型读取的内容字节，不重复计入 HTTP JSON 的转义。"""
+    return sum(len(message["content"].encode("utf-8")) + 8 for message in messages)
 
 
 def _run_error(
@@ -292,7 +292,11 @@ async def _generate_proposal(
             prompt_hash = prompt.hash
             reserved, timeout = budget.reserve(estimate_input_tokens(prompt.messages), output_tokens, limits)
         except BudgetError as error:
-            return result(error=_run_error(error.code, str(error), last_request_id))
+            message = str(error)
+            if error.code is RunFailureCode.MODEL_BUDGET and diagnostics:
+                if diagnostics[-1].error_code is RunFailureCode.MODEL_TRUNCATED:
+                    message += "；上次任务 JSON 达到输出上限并被截断"
+            return result(error=_run_error(error.code, message, last_request_id))
         except (TypeError, ValueError):
             return result(error=_run_error(RunFailureCode.INTERNAL_ERROR, "无法计算规划输入预算"))
 

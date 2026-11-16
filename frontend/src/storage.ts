@@ -9,6 +9,7 @@ export type Workspace = {
   source: Source | null;
   edited: boolean;
   orchestrated: boolean;
+  planningRunId?: string;
   layout: Layout;
 };
 export type Snapshot = { id: string; at: string; workspace: Workspace };
@@ -35,6 +36,7 @@ export function readProjects(storage: Pick<Storage, 'getItem'>): Project[] {
     const layout = decodeLayout(workspace?.layout);
     if (!layout || !isWorkspaceDraft(workspace.spec, workspace.plan)
       || ![null, 'MANUAL', 'IMPORTED', 'PRESET'].includes(workspace.source)
+      || (workspace.planningRunId !== undefined && typeof workspace.planningRunId !== 'string')
       || typeof workspace.edited !== 'boolean' || typeof workspace.orchestrated !== 'boolean') {
       throw new Error('浏览器存储格式无法读取');
     }

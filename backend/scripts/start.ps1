@@ -31,4 +31,10 @@ if (-not (Test-Path $python)) {
 
 $env:FLOWSTUDIO_WORKER_MODE = "thread"
 Write-Host "FlowStudio 后端： http://127.0.0.1:$Port"
-& $python -m uvicorn app.main:app --host 127.0.0.1 --port $Port
+$dotenv = Join-Path $backend ".env"
+$dotenvArgs = @()
+if (Test-Path -LiteralPath $dotenv -PathType Leaf) {
+    $dotenvArgs = @("--env-file", $dotenv)
+}
+
+& $python -m uvicorn app.main:app @dotenvArgs --host 127.0.0.1 --port $Port

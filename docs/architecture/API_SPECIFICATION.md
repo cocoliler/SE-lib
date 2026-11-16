@@ -57,7 +57,7 @@ SpecRevision、Task 和派生字段以 [领域模型](WORKFLOW_DATA_MODEL.md) �
 - 保存与编排复用 T05 `build_plan` / `validate_workflow`；服务端不复制图算法，也不采信客户端提交的 validity/batches/source。
 - 请求体结构错误（字段缺失、枚举非法、重复需求 ID、tasks 为空等）在解析阶段返回 422 VALIDATION_FAILED；此时不占用幂等键。业务一致性错误（来源不匹配、关键假设、未知 task_id）返回 422 并携带 `Issue`。
 - `notes` 已按契约改为 `CanvasNote[]`；`spec_snapshot` 是规格正文（DesignSpecContent），不再携带 SpecRevision 元数据。
-- REAL 模式在 C 的 T04 适配器合入前固定失败（`error.code=MODEL_AUTH`，不静默降级为 TEST），TEST 必须显式提供 fixture_id。
+- REAL 模式使用配置的 DeepSeek 模型，缺少服务端密钥时返回 `error.code=MODEL_AUTH`；TEST 必须显式提供 fixture_id。
 
 ## 保存一致性补充
 若携planning_run_id，服务端验证其状态、项目、spec_revision_id及解析后的policy与请求一致；不一致422 SOURCE_MISMATCH。未携时来源MANUAL、origin_mode=NONE。人工修改旧TEST候选仍保留origin_mode=TEST。所有derived字段服务端重算，用户提交的确认ID必须与当前候选low假设集合精确对应，critical假设阻断。

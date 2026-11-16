@@ -114,6 +114,70 @@ def test_real_run_fails_without_adapter(client) -> None:
     assert run["error"]["code"] == "MODEL_AUTH"
 
 
+def test_default_engine_repairs_graph_with_configured_provider(settings, monkeypatch) -> None:
+    import json
+
+    import httpx
+    from fastapi.testclient import TestClient
+
+    from api_support import default_proposals, spec_content
+    from app.main import create_app
+    from app.providers import default
+    from flowstudio_pm.providers.deepseek import DeepSeekProvider
+
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "integration-test-key")
+    calls = []
+
+    def complete(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        assert request.headers["Authorization"] == "Bearer integration-test-key"
+        assert request.url.host == "api.deepseek.com"
+        assert payload["model"] == "deepseek-flash"
+        assert payload["response_format"] == {"type": "json_object"}
+        assert payload["thinking"] == {"type": "disabled"}
+        calls.append(payload)
+        proposal = default_proposals()["diamond"]
+        if len(calls) == 1:
+            proposal["tasks"][1]["dependencies"].append("Missing")
+            for task in proposal["tasks"]:
+                task["description"] = "检查数据边界" * 160
+        else:
+            material = json.loads(payload["messages"][1]["content"])
+            assert material["repair"]["kind"] == "graph"
+            assert any(issue["code"] == "MISSING_DEPENDENCY" for issue in material["repair"]["issues"])
+        return httpx.Response(200, json={
+            "choices": [{
+                "finish_reason": "stop",
+                "message": {"content": json.dumps(proposal, ensure_ascii=False)},
+            }],
+            "usage": {"prompt_tokens": 800, "completion_tokens": 700, "total_tokens": 1500},
+        })
+
+    monkeypatch.setattr(default, "DeepSeekProvider", lambda **kwargs: DeepSeekProvider(
+        **kwargs, transport=httpx.MockTransport(complete)
+    ))
+    settings = settings.with_overrides(default_model="deepseek-flash", model_allowlist=("deepseek-flash",))
+    with TestClient(create_app(settings)) as client:
+        project = create_project(client)
+        spec = create_spec(client, project["id"], {
+            **spec_content(),
+            "background": "跨园区会议审批与访客协同。" * 220,
+        })
+        response = client.post("/api/v1/planning-runs", json={
+            "spec_revision_id": spec["id"], "mode": "REAL", "config": CONFIG,
+        })
+        assert response.status_code == 202
+        run_id = response.json()["id"]
+        run = client.get(f"/api/v1/planning-runs/{run_id}").json()
+        assert run["status"] == "SUCCEEDED", run
+        assert run["validation_report"]["valid"]
+        assert run["attempt_count"] == 2
+        assert run["usage"]["total_tokens"] == 3000
+        assert len(calls) == 2
+        tasks = client.get(f"/api/v1/planning-runs/{run_id}/tasks").json()["tasks"]
+        assert {task["task_id"] for task in tasks} == {"A", "B", "C", "D"}
+
+
 def test_needs_input_run_blocks_task_read(client) -> None:
     _, spec = _setup(client)
     created = make_planning_run(client, spec["id"], fixture="blocked")

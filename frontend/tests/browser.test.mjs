@@ -98,7 +98,7 @@ test('浏览器中的空项目、规格、任务、依赖、快照和 PNG', { ti
     assert.ok(!exceptionDetails, exceptionDetails?.exception?.description ?? '浏览器执行错误');
     return result.value;
   }
-  const text = (value) => until(() => evaluate((substring) => document.body.innerText.includes(substring), value), value);
+  const text = (value) => until(() => evaluate((substring) => document.body?.innerText.includes(substring), value), value);
   const click = async (label) => {
     assert.ok(await evaluate((name) => {
       const button = [...document.querySelectorAll('button')].find((element) => !element.disabled
@@ -127,6 +127,76 @@ test('浏览器中的空项目、规格、任务、依赖、快照和 PNG', { ti
     }, json, filename);
   };
   const upload = (value, filename) => uploadText(JSON.stringify(value), filename);
+  // Optional production-build smoke test against a real FlowStudio backend.
+  if (process.env.FLOWSTUDIO_TEST_BACKEND_URL) {
+    await cdp.command('Page.navigate', { url: process.env.FLOWSTUDIO_TEST_BACKEND_URL });
+    await text('暂无项目');
+    await click('创建项目');
+    await field('项目名称', '前后端联调');
+    await click('创建');
+    await click('导入规格 JSON');
+    await upload({ ...spec, requirements: ['R1', 'R2'].map((id) => ({ ...spec.requirements[0], id })) }, 'diamond-spec.json');
+    await text('导入预览');
+    await click('应用导入');
+    await evaluate(() => document.querySelector('.backend-panel').open = true);
+    await click('创建同名服务端项目');
+    await text('已连接');
+    assert.ok(await evaluate(() => {
+      const left = document.querySelector('.workspace-sidebar');
+      const tabs = document.querySelector('.project-content .tabs');
+      return left.getBoundingClientRect().right < tabs.getBoundingClientRect().left;
+    }));
+    await click('收起左栏');
+    assert.equal(await evaluate(() => document.querySelector('.sidebar-body').hidden), true);
+    assert.ok(await evaluate(() => document.querySelector('.project-content .tabs').getBoundingClientRect().height));
+    await click('展开左栏');
+    assert.equal(await evaluate(() => document.querySelector('.backend-panel').open), true);
+    await click('保存规格版本');
+    await text('规格 v1 已同步');
+    await evaluate(() => {
+      const select = document.querySelector('.backend-panel select');
+      select.value = 'TEST';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await evaluate(() => {
+      const fetchFromBackend = window.fetch.bind(window);
+      let interrupt = true;
+      window.fetch = (url, options) => {
+        if (interrupt && String(url).startsWith('/api/v1/planning-runs/') && options.method === 'GET') {
+          interrupt = false;
+          return Promise.reject(new TypeError('模拟断线'));
+        }
+        return fetchFromBackend(url, options);
+      };
+    });
+    await click('发起规划');
+    await text('继续查询规划结果');
+    await click('继续查询规划结果');
+    await text('规划完成');
+    await text('用 4 项候选任务替换当前草稿');
+    await click('用 4 项候选任务替换当前草稿');
+    await click('服务端编排');
+    await text('服务端编排完成');
+    await click('保存计划版本');
+    await text('已保存服务端计划 v1 · TEST / TEST');
+    await evaluate(() => document.querySelector('.backend-versions').open = true);
+    await click('读取服务端布局');
+    await text('已读取布局版本');
+    await click('保存布局');
+    await text('布局已保存');
+    const bundle = await evaluate(async () => {
+      const link = document.querySelector('.backend-panel a');
+      const response = await fetch(link.href);
+      if (!response.ok) throw new Error('导出失败：' + response.status);
+      return response.json();
+    });
+    assert.equal(bundle.plan_revision.source, 'TEST');
+    assert.equal(bundle.plan_revision.parallel_batches.length, 3);
+    assert.equal(bundle.layout.revision, 2);
+    await click('保存计划版本');
+    await text('已保存服务端计划 v2');
+  }
+
   await cdp.command('Page.navigate', { url: 'http://127.0.0.1:' + server.address().port });
   await text('暂无项目');
   assert.equal(await evaluate(() => localStorage.getItem('flowstudio.workspace.v1')), null);
@@ -175,7 +245,7 @@ test('浏览器中的空项目、规格、任务、依赖、快照和 PNG', { ti
   await click('应用导入');
   assert.equal(await evaluate(() => document.querySelector('.spec-form input').value), '导入后规格');
   await click('进入任务规划');
-  await text('PM Agent 服务未连接');
+  await text('从后端工作区发起规划，或手动编辑任务');
   await text('暂无任务规划');
   await click('创建首个任务');
   await text('计划有校验问题');
@@ -436,7 +506,7 @@ test('浏览器中的空项目、规格、任务、依赖、快照和 PNG', { ti
   await text('待重新编排');
   await click('本地历史');
   assert.ok(await evaluate(() => {
-    const record = document.querySelector('.history > button');
+    const record = document.querySelector('.history-row > button');
     record?.click();
     return !!record;
   }));
@@ -445,6 +515,31 @@ test('浏览器中的空项目、规格、任务、依赖、快照和 PNG', { ti
   assert.equal(await evaluate(() => document.querySelector('.inspector fieldset').disabled), true);
   await cdp.command('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
   assert.ok(await evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+  await click('保存快照');
+  await text('记录快照');
+  await click('任务规划');
+  await click('手动创建任务');
+  await click('本地历史');
+  await evaluate(() => { window.confirm = () => true; });
+  await evaluate(() => {
+    const row = document.querySelector('.history-row');
+    row.querySelector('button').click();
+    row.querySelector('button.danger').click();
+  });
+  await text('已删除本地快照');
+  assert.equal(await evaluate(() => document.querySelectorAll('.history-row').length), 1);
+  await click('清空本地历史');
+  await text('暂无快照');
+  const persisted = await evaluate(() => JSON.parse(localStorage.getItem('flowstudio.workspace.v1'))[0]);
+  assert.equal(persisted.history.length, 0);
+  assert.equal(persisted.workspace.plan.tasks.length, 2);
+  await click('任务规划');
+  assert.equal(await evaluate(() => document.querySelectorAll('tbody tr').length), 3);
+  await click('保存到浏览器');
+  await cdp.command('Page.reload');
+  await text('规格已通过基础校验');
+  await click('本地历史');
+  await text('暂无快照');
   await click('新建项目');
   await click('从示例创建');
   await text('规格已通过基础校验');
@@ -458,5 +553,18 @@ test('浏览器中的空项目、规格、任务、依赖、快照和 PNG', { ti
   assert.equal(projects[1].name, '会议室预约');
   assert.equal(projects[1].workspace.source, 'PRESET');
   assert.equal(projects[1].workspace.plan.tasks.length, 3);
+  await click('切换项目');
+  await click('浏览器验收');
+  await click('切换项目');
+  assert.equal(await evaluate(() => document.querySelectorAll('.project-remove').length), 1);
+  assert.equal(await evaluate(() => document.querySelector('.project-remove').parentElement.dataset.active), 'true');
+  await evaluate(() => { window.confirm = () => false; });
+  await click('删除本地项目 浏览器验收');
+  assert.equal(await evaluate(() => document.querySelectorAll('.project-option').length), 3);
+  await evaluate(() => { window.confirm = () => true; });
+  await click('删除本地项目 浏览器验收');
+  await text('已删除本地项目');
+  assert.equal(await evaluate(() => document.querySelector('.project-remove')), null);
+  assert.deepEqual(await evaluate(() => JSON.parse(localStorage.getItem('flowstudio.workspace.v1'))), [projects[1]]);
   assert.deepEqual(cdp.events.filter((event) => event.method === 'Runtime.exceptionThrown'), []);
 });

@@ -136,6 +136,7 @@ class DeepSeekProvider:
             "messages": list(messages),
             "max_tokens": max_tokens,
             "response_format": {"type": "json_object"},
+            "thinking": {"type": "disabled"},
             "stream": False,
         }
         request_id = None

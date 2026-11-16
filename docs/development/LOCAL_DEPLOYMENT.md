@@ -1,30 +1,54 @@
 # Windows 本地开发与运行
-## 当前确实可运行的部分
-现有仓库前端，要求Node满足frontend/package.json（当前≥22.12.0），不在本轮升级：
-```powershell
-Set-Location D:\Program01\TW1\frontend
-npm ci
-npm run dev
-```
-浏览器访问 Vite 输出地址。工作台可创建空项目，也可显式加载「会议室预约」PRESET。手动或导入任务可在浏览器完成预检、编排与快照保存；工作区显示 PM Agent 尚未连接。
 
-生产构建与前端验证分别执行 `npm run build`、`npm test`、`npm run test:browser`。浏览器测试读取生产构建，可用 `CHROME_BIN` 指定 Chromium。契约生成和一致性检查见[工程组织](PROJECT_STRUCTURE.md)。
-独立CLI分支不是main网页服务；本地prototype缓存不构成运行入口。
+需要 Python 3.11+、Node.js 22.12+ 和 npm。以下命令从仓库根目录开始。
 
-## 后端（已可运行，从 backend 目录启动）
+## 启动开发环境
+
+在第一个 PowerShell 窗口启动后端：
+
 ```powershell
 Set-Location backend
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-$env:PYTHONPATH = "$PWD;$(Split-Path -Parent $PWD)\tech"
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1
 ```
-也可直接执行 `.\scripts\dev.ps1`（热重载，首次自动建 venv）或 `.\scripts\start.ps1`（无热重载）。两个脚本都会把 `backend` 与 `tech` 加入 PYTHONPATH；契约包不在 backend 内，缺这条会导入失败。
-`PYTHONPATH` 必须同时包含 `backend`（应用与 T05 编排器）和 `tech`（flowstudio_contracts）。API 文档在 `http://127.0.0.1:8000/docs`；契约里没有 `/health`，就绪用 `GET /api/v1/projects` 判断。
-Vite /api代理到8000；生产由FastAPI提供静态dist（`FLOWSTUDIO_FRONTEND_DIST`），保持同源。不需要Docker/Redis/云数据库。
-数据目录默认 `backend/.flowstudio`（可用 `FLOWSTUDIO_DATA_DIR` 覆盖），数据库文件 `flowstudio.db`；启动持有实例锁并按 `FLOWSTUDIO_USE_ALEMBIC` 执行迁移/建表。更新前备份，恢复后integrity_check。
-API Key经后端环境变量DEEPSEEK_API_KEY读取；.env不入Git、不下发前端；模型实际ID配置单独保存，不能随文档假定某个ID永久可用。
-无Key时仍可编辑/读历史和显式TEST；REAL 由默认引擎直接返回 `MODEL_AUTH`（不静默降级），待 C 的 T04 适配器接入。
-测试命令：仓库根 `python -m pytest`（pytest.ini 已配置 testpaths 与 PYTHONPATH）；编排器 `cd backend; python -m unittest discover -s tests`。契约漂移：`python backend/tools/export_openapi.py`。
 
-真实 HTTP 端到端自证（服务已启动后执行）：`cd backend; python scripts/e2e_smoke.py --base-url http://127.0.0.1:8000`。脚本依次验证项目→规格→TEST 规划（fixture `diamond`）→计划→布局→导出，并检查未知路径返回 `NOT_FOUND` 契约信封；任一步不符即以非零码退出。
+首次启动会创建 `backend/.venv` 并安装依赖。保持此窗口运行。后端默认监听 `127.0.0.1:8000`，可访问 [API 文档](http://127.0.0.1:8000/docs)，或用 `GET /api/v1/projects` 检查服务。
+
+在另一个 PowerShell 窗口从仓库根目录启动前端：
+
+```powershell
+Set-Location frontend
+npm.cmd ci
+npm.cmd run dev
+```
+
+打开 [FlowStudio](http://127.0.0.1:5173/)。Vite 开发代理将 `/api` 转发到 `127.0.0.1:8000`。项目操作见[前端使用指南](../../frontend/README.md)。
+
+## 配置真实模型
+
+如还没有 `backend/.env`，把 `backend/.env.example` 复制为 `backend/.env`。填写以下三项：
+
+```dotenv
+DEEPSEEK_API_KEY=填写实际密钥
+FLOWSTUDIO_DEFAULT_MODEL=deepseek-flash
+FLOWSTUDIO_MODEL_ALLOWLIST=deepseek-flash
+```
+
+启动脚本自动读取 `.env`。同名终端环境变量优先，修改后需要重启后端。`.env` 已被 Git 忽略，密钥只供后端使用。REAL 模式通过 DeepSeek 生成任务并执行校验；若未设置密钥，返回 `MODEL_AUTH`。TEST 模式读取显式选择的本地样例，`diamond` 需要规格包含需求 `R1` 和 `R2`。
+
+## 同源运行和存储
+
+在 `frontend` 运行 `npm.cmd run build` 后，回到 `backend` 运行：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start.ps1
+```
+
+需先通过开发脚本初始化虚拟环境。启动脚本检测到 `frontend/dist` 时，由 FastAPI 同源提供页面和 API，此时打开 [http://127.0.0.1:8000/](http://127.0.0.1:8000/)。
+
+后端数据默认保存在 `backend/.flowstudio/flowstudio.db`，可用 `FLOWSTUDIO_DATA_DIR` 或 `FLOWSTUDIO_DATABASE_URL` 配置。升级前备份数据库。浏览器草稿和快照属于页面所在源，开发端口 `5173` 和同源端口 `8000` 使用各自的浏览器存储。
+
+## 验证
+
+- 前端：`npm.cmd run build`、`npm.cmd test`、`npm.cmd run test:browser`。浏览器测试读取生产构建，可设置 `CHROME_BIN` 和 `FLOWSTUDIO_TEST_BACKEND_URL`。
+- 后端：使用后端虚拟环境的 Python，在仓库根目录运行 `python -m pytest backend/tests backend/tests_pm`。契约检查见[工程组织](PROJECT_STRUCTURE.md)。
+- HTTP 冒烟：在 `backend` 目录以虚拟环境的 Python 运行 `python scripts/e2e_smoke.py --base-url http://127.0.0.1:8000`，使用 TEST 样例校验规格、规划、保存、布局和导出。

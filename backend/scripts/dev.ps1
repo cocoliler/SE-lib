@@ -32,4 +32,10 @@ Write-Host "安装依赖（首次较慢）..."
 $env:FLOWSTUDIO_WORKER_MODE = "thread"
 Write-Host "启动后端： http://127.0.0.1:$Port/docs"
 Write-Host "前端开发请另开终端在 frontend 目录执行 npm run dev（/api 代理到 $Port）"
-& $python -m uvicorn app.main:app --host 127.0.0.1 --port $Port --reload
+$dotenv = Join-Path $backend ".env"
+$dotenvArgs = @()
+if (Test-Path -LiteralPath $dotenv -PathType Leaf) {
+    $dotenvArgs = @("--env-file", $dotenv)
+}
+
+& $python -m uvicorn app.main:app @dotenvArgs --host 127.0.0.1 --port $Port --reload

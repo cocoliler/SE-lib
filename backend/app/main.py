@@ -8,6 +8,8 @@
 
 from __future__ import annotations
 
+import os
+
 import json
 import logging
 from contextlib import asynccontextmanager
@@ -177,7 +179,13 @@ def create_app(settings: Settings | None = None, engine: PlanningEngine | None =
         if interrupted:
             LOGGER.warning("启动恢复：%s 个未终结规划请求已标记 FAILED", interrupted)
 
-        adapter = engine or DefaultPlanningEngine(settings.fixtures_dir)
+        adapter = engine or DefaultPlanningEngine(
+            settings.fixtures_dir,
+            api_key=os.environ.get("DEEPSEEK_API_KEY", "").strip(),
+            models=tuple(dict.fromkeys((settings.default_model, *(
+                model for model in settings.model_allowlist if model != "configured-default"
+            )))),
+        )
         app.state.engine = adapter
         coordinator = PlanningCoordinator(app.state.sessionmaker, adapter)
         planning_queue = PlanningQueue(
