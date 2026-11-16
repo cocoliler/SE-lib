@@ -1,4 +1,4 @@
-"""运行一次有界 PM 结构化候选生成。"""
+"""在共享预算内生成结构候选，按入口选择是否调用 D 校验。"""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 from flowstudio_contracts import (
+    IssueSeverity,
     PlanningConfig,
     PlanningMode,
     RunError,
@@ -17,10 +18,12 @@ from flowstudio_contracts import (
     SpecRevision,
     TaskProposal,
     TokenUsage,
+    ValidationReport,
     canonical_json,
 )
 from flowstudio_contracts.codes import RETRYABLE_RUN_FAILURES
 from flowstudio_contracts.constants import MAX_BODY_BYTES, MAX_OUTPUT_TOKENS, RETRY_BACKOFF_SECONDS
+from flowstudio_orchestration import OrchestrationLimitError, compute_input_hash, validate_workflow
 
 from .budget import BudgetError, RunBudget, aggregate_usage
 from .parser import ProposalError, parse_proposal, with_blocking_questions
@@ -33,6 +36,32 @@ class ProposalKind(StrEnum):
     CANDIDATE = "CANDIDATE"
     NEEDS_INPUT = "NEEDS_INPUT"
     FAILED = "FAILED"
+
+
+class GraphFailure(StrEnum):
+    """模块内图校验失败原因，公共运行错误码映射待契约和应用层确认。"""
+
+    INVALID = "GRAPH_INVALID"
+    LIMIT = "GRAPH_LIMIT"
+    VALIDATOR_ERROR = "VALIDATOR_ERROR"
+
+
+@dataclass(frozen=True, slots=True)
+class GraphLimit:
+    """D 拒绝校验时返回的真实规模诊断。"""
+
+    limit: int
+    actual: int
+
+
+@dataclass(frozen=True, slots=True)
+class GraphCheck:
+    """把一次 D 校验结果及其候选绑定在同一对象中。"""
+
+    attempt_index: int
+    proposal: TaskProposal = field(repr=False)
+    report: ValidationReport | None = field(default=None, repr=False)
+    limit: GraphLimit | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,11 +81,16 @@ class AttemptDiagnostic:
     usage_unknown: bool
     error_code: RunFailureCode | None
     provider_failure: ProviderFailureKind | None
+    graph_failure: GraphFailure | None = None
+    graph_limit: GraphLimit | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class ProposalResult:
-    """内部规划结果。CANDIDATE 只表示提案符合结构约束。"""
+    """内部候选结果。具备 D 报告的候选通过了当前确定性规则。
+
+    proposal 用于候选或需补充输入。校验失败及后续失败的证据保存在 graph_check。
+    """
 
     kind: ProposalKind
     mode: PlanningMode
@@ -65,6 +99,8 @@ class ProposalResult:
     diagnostics: tuple[AttemptDiagnostic, ...]
     proposal: TaskProposal | None = field(default=None, repr=False)
     error: RunError | None = None
+    graph_check: GraphCheck | None = field(default=None, repr=False)
+    graph_failure: GraphFailure | None = None
 
     @property
     def attempt_count(self) -> int:
@@ -121,6 +157,29 @@ def _response_hash(response: ProviderResponse | None) -> str | None:
     return hashlib.sha256(response.content.encode("utf-8", errors="surrogatepass")).hexdigest()
 
 
+def _validate_candidate(
+    proposal: TaskProposal, spec: SpecRevision, config: PlanningConfig
+) -> ValidationReport:
+    """对每次校验传入独立副本，核对返回报告是否绑定本次候选和快照。"""
+    expected_hash = compute_input_hash(proposal.tasks, spec.content, config.policy)
+    report = validate_workflow(
+        [task.model_copy(deep=True) for task in proposal.tasks],
+        spec.content.model_copy(deep=True),
+        config.policy.model_copy(deep=True) if config.policy is not None else None,
+    )
+    if not isinstance(report, ValidationReport):
+        raise ValueError("编排器未返回校验报告")
+    # 从数据重验可变的报告并切断原对象引用，避免回调后续修改已记录的证据。
+    checked = ValidationReport.model_validate(report.model_dump(mode="json", warnings="error"), strict=True)
+    if (
+        checked.input_hash != expected_hash
+        or any(issue.severity is not IssueSeverity.ERROR for issue in checked.errors)
+        or any(issue.severity is not IssueSeverity.WARNING for issue in checked.warnings)
+    ):
+        raise ValueError("编排器返回的报告与本次校验不一致")
+    return checked
+
+
 async def generate_proposal(
     spec: SpecRevision,
     config: PlanningConfig,
@@ -132,12 +191,55 @@ async def generate_proposal(
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     estimate_input_tokens: Callable[[Sequence[Message]], int] = estimate_input_tokens,
 ) -> ProposalResult:
-    """自开始执行起限时生成候选，调用方负责 Provider 生命周期与后续图校验。"""
+    """限时生成纯结构候选，调用方负责 Provider 生命周期与后续图校验。"""
+    return await _generate_proposal(
+        spec, config, mode, provider,
+        fixture_id=fixture_id, monotonic=monotonic, sleep=sleep,
+        estimate_input_tokens=estimate_input_tokens, validate_graph=False,
+    )
+
+
+async def generate_validated_proposal(
+    spec: SpecRevision,
+    config: PlanningConfig,
+    mode: PlanningMode,
+    provider: LLMProvider,
+    *,
+    fixture_id: str | None = None,
+    monotonic: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    estimate_input_tokens: Callable[[Sequence[Message]], int] = estimate_input_tokens,
+) -> ProposalResult:
+    """限时生成并通过 D 校验的内部候选；运行终态和正式保存由应用层处理。"""
+    return await _generate_proposal(
+        spec, config, mode, provider,
+        fixture_id=fixture_id, monotonic=monotonic, sleep=sleep,
+        estimate_input_tokens=estimate_input_tokens, validate_graph=True,
+    )
+
+
+async def _generate_proposal(
+    spec: SpecRevision,
+    config: PlanningConfig,
+    mode: PlanningMode,
+    provider: LLMProvider,
+    *,
+    fixture_id: str | None,
+    monotonic: Callable[[], float],
+    sleep: Callable[[float], Awaitable[None]],
+    estimate_input_tokens: Callable[[Sequence[Message]], int],
+    validate_graph: bool,
+) -> ProposalResult:
+    """用同一循环处理结构修复、图修复与可重试的传输失败。"""
     budget = RunBudget(monotonic)
     diagnostics: list[AttemptDiagnostic] = []
+    graph_check: GraphCheck | None = None
 
     def result(
-        *, proposal: TaskProposal | None = None, error: RunError | None = None
+        *,
+        proposal: TaskProposal | None = None,
+        error: RunError | None = None,
+        graph_failure: GraphFailure | None = None,
     ) -> ProposalResult:
         kind = ProposalKind.FAILED
         if proposal is not None:
@@ -150,32 +252,36 @@ async def generate_proposal(
             diagnostics=tuple(diagnostics),
             proposal=proposal,
             error=error,
+            graph_check=graph_check,
+            graph_failure=graph_failure,
         )
 
-    if not _mode_matches(provider, mode, fixture_id):
-        return result(error=_run_error(RunFailureCode.INTERNAL_ERROR, "规划模式与 Provider 或 fixture 不匹配"))
-    model = config.model
     try:
+        # 在 Provider、估算器等回调执行前隔离外部传入的可变模型。
+        spec = spec.model_copy(deep=True)
+        config = config.model_copy(deep=True)
+        if not _mode_matches(provider, mode, fixture_id):
+            return result(error=_run_error(RunFailureCode.INTERNAL_ERROR, "规划模式与 Provider 或 fixture 不匹配"))
+        model = config.model
         limits = provider.model_limits(model)
         if not isinstance(limits, ModelLimits):
             raise ValueError("模型限额无效")
-        initial_prompt = build_prompt(spec, config)
+        initial_prompt = build_prompt(spec, config, validate_graph=validate_graph)
     except (ValueError, TypeError):
         return result(error=_run_error(RunFailureCode.INTERNAL_ERROR, "规划模型配置或输入快照无效"))
 
     output_tokens = min(MAX_OUTPUT_TOKENS, limits.max_output_tokens)
     prompt = initial_prompt
     transport_retried = False
-    last_error: RunError | None = None
     last_request_id: str | None = None
-    while budget.has_attempts:
+    while True:
         try:
             budget.check_deadline()
             messages = prompt.messages
             if _message_bytes(messages) > MAX_BODY_BYTES:
                 raise BudgetError(RunFailureCode.MODEL_BUDGET, "规划输入超出消息大小上限")
             prompt_hash = prompt.hash
-            reserved, timeout = budget.reserve(estimate_input_tokens(messages), output_tokens, limits)
+            reserved, timeout = budget.reserve(estimate_input_tokens(prompt.messages), output_tokens, limits)
         except BudgetError as error:
             return result(error=_run_error(error.code, str(error), last_request_id))
         except (TypeError, ValueError):
@@ -204,6 +310,9 @@ async def generate_proposal(
         accounted, usage_unknown = budget.settle(reserved, actual_usage)
         proposal = None
         repair_error = None
+        graph_failure = None
+        graph_limit = None
+        next_prompt = None
         try:
             budget.check_deadline()
             budget.check_accounted_tokens()
@@ -213,18 +322,42 @@ async def generate_proposal(
                 attempt_error = _run_error(_PROVIDER_CODES[failure.kind], str(failure), request_id)
             elif response is not None:
                 proposal = with_blocking_questions(parse_proposal(response))
+                budget.check_deadline()
+                if validate_graph and not proposal.is_blocked:
+                    try:
+                        report = _validate_candidate(proposal, spec, config)
+                    except OrchestrationLimitError as error:
+                        budget.check_deadline()
+                        graph_failure = GraphFailure.LIMIT
+                        graph_limit = GraphLimit(limit=error.limit, actual=error.actual)
+                        graph_check = GraphCheck(budget.attempt_count, proposal, limit=graph_limit)
+                        if budget.has_attempts:
+                            next_prompt = initial_prompt.with_graph_limit_repair(
+                                response, limit=graph_limit.limit, actual=graph_limit.actual,
+                            )
+                    except Exception:
+                        graph_failure = GraphFailure.VALIDATOR_ERROR
+                    else:
+                        budget.check_deadline()
+                        graph_check = GraphCheck(budget.attempt_count, proposal, report=report)
+                        if report.errors:
+                            graph_failure = GraphFailure.INVALID
+                            if budget.has_attempts:
+                                next_prompt = initial_prompt.with_graph_repair(response, report.errors)
         except ProposalError as error:
             repair_error = error
             attempt_error = _run_error(error.code, str(error), request_id)
         except BudgetError as error:
             attempt_error = _run_error(error.code, str(error), request_id)
 
+        if budget.has_attempts and repair_error is not None and response is not None:
+            next_prompt = initial_prompt.with_repair(response, repair_error)
         response_hash = _response_hash(response)
         try:
             budget.check_deadline()
         except BudgetError as error:
             attempt_error = _run_error(error.code, str(error), request_id)
-            repair_error = None
+            next_prompt = None
         diagnostics.append(AttemptDiagnostic(
             index=budget.attempt_count,
             prompt_version=prompt.version,
@@ -239,25 +372,26 @@ async def generate_proposal(
             usage_unknown=usage_unknown,
             error_code=attempt_error.code if attempt_error is not None else None,
             provider_failure=failure.kind if failure is not None else None,
+            graph_failure=graph_failure,
+            graph_limit=graph_limit,
         ))
+        last_request_id = request_id
+        if next_prompt is not None:
+            prompt = next_prompt
+            continue
+        if attempt_error is None and graph_failure is not None:
+            return result(graph_failure=graph_failure)
         if attempt_error is None and proposal is not None:
             return result(proposal=proposal)
         if attempt_error is None:
             return result(error=_run_error(RunFailureCode.INTERNAL_ERROR, "模型 Provider 未返回有效响应"))
 
-        last_error = attempt_error
-        last_request_id = request_id
-        if not budget.has_attempts:
-            break
-        if repair_error is not None and response is not None:
-            prompt = initial_prompt.with_repair(response, repair_error)
-            continue
         if (
-            failure is None or transport_retried
+            not budget.has_attempts or failure is None or transport_retried
             or failure.kind not in _RETRYABLE_PROVIDER_FAILURES
             or attempt_error.code is not _PROVIDER_CODES[failure.kind]
         ):
-            break
+            return result(error=attempt_error)
         transport_retried = True
         remaining = budget.remaining_seconds
         if remaining <= _BACKOFF_SECONDS:
@@ -267,5 +401,3 @@ async def generate_proposal(
                 await sleep(_BACKOFF_SECONDS)
         except TimeoutError:
             return result(error=_run_error(RunFailureCode.MODEL_TIMEOUT, "规划等待重试时达到总截止时间", request_id))
-
-    return result(error=last_error)
