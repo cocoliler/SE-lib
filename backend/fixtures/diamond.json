@@ -1,0 +1,141 @@
+{
+  "schema_version": "1.0",
+  "tasks": [
+    {
+      "task_id": "A",
+      "name": "任务 A",
+      "description": "完成 A 的交付",
+      "category": "design",
+      "stage": "design",
+      "priority": "medium",
+      "assigned_role": "architect",
+      "dependencies": [],
+      "inputs": [],
+      "deliverables": [
+        {
+          "id": "doc",
+          "text": "A 的 doc"
+        }
+      ],
+      "acceptance_criteria": [
+        "结果可观察"
+      ],
+      "source_requirement_ids": [
+        "R1",
+        "R2"
+      ],
+      "rationale": "",
+      "assumptions": [],
+      "estimated_effort": null
+    },
+    {
+      "task_id": "B",
+      "name": "任务 B",
+      "description": "完成 B 的交付",
+      "category": "design",
+      "stage": "design",
+      "priority": "medium",
+      "assigned_role": "architect",
+      "dependencies": [
+        "A"
+      ],
+      "inputs": [
+        {
+          "kind": "task",
+          "task_id": "A",
+          "deliverable_id": "doc"
+        }
+      ],
+      "deliverables": [
+        {
+          "id": "doc",
+          "text": "B 的 doc"
+        }
+      ],
+      "acceptance_criteria": [
+        "结果可观察"
+      ],
+      "source_requirement_ids": [
+        "R1"
+      ],
+      "rationale": "",
+      "assumptions": [],
+      "estimated_effort": null
+    },
+    {
+      "task_id": "C",
+      "name": "任务 C",
+      "description": "完成 C 的交付",
+      "category": "design",
+      "stage": "design",
+      "priority": "medium",
+      "assigned_role": "architect",
+      "dependencies": [
+        "A"
+      ],
+      "inputs": [
+        {
+          "kind": "task",
+          "task_id": "A",
+          "deliverable_id": "doc"
+        }
+      ],
+      "deliverables": [
+        {
+          "id": "doc",
+          "text": "C 的 doc"
+        }
+      ],
+      "acceptance_criteria": [
+        "结果可观察"
+      ],
+      "source_requirement_ids": [
+        "R1"
+      ],
+      "rationale": "",
+      "assumptions": [],
+      "estimated_effort": null
+    },
+    {
+      "task_id": "D",
+      "name": "任务 D",
+      "description": "完成 D 的交付",
+      "category": "build",
+      "stage": "build",
+      "priority": "medium",
+      "assigned_role": "engineer",
+      "dependencies": [
+        "B",
+        "C"
+      ],
+      "inputs": [
+        {
+          "kind": "task",
+          "task_id": "B",
+          "deliverable_id": "doc"
+        },
+        {
+          "kind": "task",
+          "task_id": "C",
+          "deliverable_id": "doc"
+        }
+      ],
+      "deliverables": [
+        {
+          "id": "doc",
+          "text": "D 的 doc"
+        }
+      ],
+      "acceptance_criteria": [
+        "结果可观察"
+      ],
+      "source_requirement_ids": [
+        "R1"
+      ],
+      "rationale": "",
+      "assumptions": [],
+      "estimated_effort": null
+    }
+  ],
+  "blocking_questions": []
+}
