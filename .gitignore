@@ -2,11 +2,12 @@
 /docs.rar
 
 # Local runtime data and secrets
-/.flowstudio/
+.flowstudio/
 .env
 .env.*
 !.env.example
 .venv/
 node_modules/
 __pycache__/
+.pytest_cache/
 *.pyc

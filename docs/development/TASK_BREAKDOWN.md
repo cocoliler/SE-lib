@@ -14,4 +14,4 @@
 | T11 | D/E/B/F / T10 | 运行监控、审批、取消、审查及新Run修订 | A16；状态一致和证据可复现 |
 | T12 | C/E / 用户需求 | 文档解析→待确认规格 | A17；缺信息标注、不能绕过Schema |
 
-模块作者写本模块单测，F负责跨模块验收。T01 契约已交付，T03/T06 已提供本地工作区与图投影，T05 纯函数编排器已交付（`backend/flowstudio_orchestration`，53 项单测；HTTP 接线待 T02）。下一步 B 和 E 对齐规格版本、正式 Layout 请求、版本冲突及报告映射。契约样例用于测试预期输入输出；REAL/TEST 规划状态在真实运行接口就绪后接入。
+模块作者写本模块单测，F负责跨模块验收。T01 契约已交付，T03/T06 已提供本地工作区与图投影，T05 纯函数编排器已交付（`backend/flowstudio_orchestration`，53 项单测），T02/T07 的 FastAPI 路由、应用用例与 SQLite 仓储已接入同一契约并直接调用 T05（pytest 118 项）。下一步 B 与 E 联调前端切换到服务端 Layout/PUT、版本冲突与导出；API Key 与 T04 真实适配器就绪后再验证 REAL 规划状态，当前 REAL 显式失败、TEST 需 fixture。

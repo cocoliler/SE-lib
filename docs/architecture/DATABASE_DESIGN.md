@@ -7,7 +7,7 @@ SQLite + SQLAlchemy + Alembic，foreign_keys=ON，WAL，busy_timeout=5000ms。�
 | projects | id PK, name, archived_at, created_at |
 | specs | id PK, project_id FK UNIQUE, latest_revision |
 | spec_revisions | id PK, spec_id FK, revision, content_json, hash, created_at；UNIQUE(spec_id,revision) |
-| planning_runs | id PK, spec_revision_id FK, status CHECK, mode CHECK, config_json, proposal_json?, error_json?, usage_json?, attempt_count, created_at；索引(status,created_at) |
+| planning_runs | id PK, spec_revision_id FK, status CHECK, mode CHECK, fixture_id?, config_json, proposal_json?, report_json?, error_json?, usage_json?, attempt_count, created_at；索引(status,created_at) |
 | planning_attempts | (planning_run_id,attempt_no) PK, request_hash, response_json/text, usage_json, error_json, timestamps；不保存 Key |
 | plans | id PK, project_id FK, latest_revision |
 | plan_revisions | id PK, plan_id FK, revision, spec_revision_id FK, planning_run_id FK nullable, parent_revision_id FK nullable, policy_json, source, origin_mode, confirmed_assumption_ids_json, hash, created_at；UNIQUE(plan_id,revision) |
@@ -15,7 +15,7 @@ SQLite + SQLAlchemy + Alembic，foreign_keys=ON，WAL，busy_timeout=5000ms。�
 | task_dependencies | (revision_id,source_task_id,target_task_id) PK；两端复合 FK → tasks；CHECK source≠target |
 | task_details | (revision_id,task_id) PK/FK, inputs_json,deliverables_json,acceptance_json,requirement_ids_json,assumptions_json；一对一结构化详情 |
 | plan_derivations | revision_id PK/FK, stages_json,batches_json,order_json,report_json,rules_version；派生缓存 |
-| layouts | plan_revision_id PK/FK, revision, positions_json,notes_json,viewport_json |
+| layouts | plan_revision_id PK/FK, revision, positions_json, notes_json, viewport_json；notes_json 为 CanvasNote 数组（id/text/x/y/color?），不是 task_id→文本映射 |
 | commands | (scope,idempotency_key) PK, request_hash,result_json,created_at；持久重试去重 |
 
 任务和依赖单独关系表，以数据库约束保护引用；规格、规划配置和任务内部短数组使用 JSON，避免每条字符串都建表，也不把整个系统塞进一个 JSON。
@@ -50,3 +50,9 @@ erDiagram
 生产失败恢复备份，不承诺所有降级脚本可保留新数据。数据库、密钥和日志不提交 Git。
 启动检测版本与完整性；旧 CLI 库独立保留，不能原地解释为新 Schema。
 P2 新增 runs/task_runs/attempts/artifacts/events/approvals；规划表不迁移成执行表。
+
+## 实现状态（E）
+- 迁移脚本位于 [backend/migrations](../../backend/migrations)，首个 revision 建全部表与索引；`FLOWSTUDIO_USE_ALEMBIC=0` 时退化为 create_all，仅供测试/快速试跑。
+- 连接参数在 [db.py](../../backend/app/persistence/db.py)：foreign_keys=ON、WAL、busy_timeout=5000ms；写冲突映射 503 STORAGE_BUSY。
+- 正式任务从 tasks/task_dependencies/task_details 读取，`proposal_json` 只作模型输出审计；`report_json` 保存该次规划的报告，使 PlanningRun 可复核。
+- Layout 的 notes 语义随契约调整见上表；导出时 `spec_snapshot` 取自 spec_revisions.content。
