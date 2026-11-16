@@ -26,3 +26,5 @@ Vite /api代理到8000；生产由FastAPI提供静态dist（`FLOWSTUDIO_FRONTEND
 API Key经后端环境变量DEEPSEEK_API_KEY读取；.env不入Git、不下发前端；模型实际ID配置单独保存，不能随文档假定某个ID永久可用。
 无Key时仍可编辑/读历史和显式TEST；REAL 由默认引擎直接返回 `MODEL_AUTH`（不静默降级），待 C 的 T04 适配器接入。
 测试命令：仓库根 `python -m pytest`（pytest.ini 已配置 testpaths 与 PYTHONPATH）；编排器 `cd backend; python -m unittest discover -s tests`。契约漂移：`python backend/tools/export_openapi.py`。
+
+真实 HTTP 端到端自证（服务已启动后执行）：`cd backend; python scripts/e2e_smoke.py --base-url http://127.0.0.1:8000`。脚本依次验证项目→规格→TEST 规划（fixture `diamond`）→计划→布局→导出，并检查未知路径返回 `NOT_FOUND` 契约信封；任一步不符即以非零码退出。
