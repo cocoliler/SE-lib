@@ -20,6 +20,7 @@
 改变需求后不要求全部ID变化，要求相关交付和验收发生有意义变化；不以节点数变化作为唯一通用性证据。
 
 ## 执行与报告
-前端使用 `npm run build`、`npm test` 和 `npm run test:browser`，浏览器测试使用本机 Chromium 并以独立配置运行。正式服务上线后另补 API、事务和 Provider 集成测试。证据见[实现审计](../PROJECT_AUDIT.md)。
+前端使用 `npm run build`、`npm test` 和 `npm run test:browser`，浏览器测试使用本机 Chromium 并以独立配置运行。
+后端使用仓库根 `python -m pytest`（契约、API、持久化、恢复、布局与幂等，当前 118 项）与 `cd backend; python -m unittest discover -s tests`（T05 编排器 53 项）；`python backend/tools/export_openapi.py` 检查路由与契约操作表的漂移。Provider 集成测试目前覆盖 TEST fixture 与 REAL 未配置时的显式失败，真实模型测试待 T04。证据见[实现审计](../PROJECT_AUDIT.md)。
 记录commit、环境、依赖、输入hash、模式、Prompt/规则版本、模型实际ID、usage、候选和验证报告、人工判定。
 没有Key或外部模型失败时记录REAL阻断，TEST仍可测试结构但不能替代真实智能规划验收。

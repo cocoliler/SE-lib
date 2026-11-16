@@ -14,4 +14,4 @@
 | 实时 | REST轮询 vs SSE vs WebSocket | P0轮询；P2单向运行事件用SSE；无实时多人协作，不选WebSocket |
 | 工程 | 单体 vs 微服务/队列 | 单进程、持久PlanningRun+有界队列；中断显式失败，不引入Redis/Docker |
 
-证据见 [研究](../research/REFERENCE_PROJECTS.md)。SQLite/Python后端尚未实际搭建，Windows依赖组合由T01实验确认；不能把推荐写成兼容认证。
+证据见 [研究](../research/REFERENCE_PROJECTS.md)。SQLite/Python 后端已由 T02/T07 在 Windows 上以 FastAPI + SQLAlchemy/Alembic 落地（见[本地部署](../development/LOCAL_DEPLOYMENT.md)），跨平台差异仍以实测为准；不能把推荐写成兼容认证。
