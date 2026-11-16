@@ -1,4 +1,4 @@
-# 开发启动脚本（Windows PowerShell 5.1+）
+﻿# 开发启动脚本（Windows PowerShell 5.1+）
 # 用法（在 backend 目录下）： .\scripts\dev.ps1 [-Port 8000]
 
 param([int]$Port = 8000)

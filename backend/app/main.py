@@ -17,7 +17,9 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from flowstudio_contracts import ErrorCode
 from sqlalchemy.exc import OperationalError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from flowstudio_contracts import SCHEMA_VERSION
 from flowstudio_contracts.constants import MAX_BODY_BYTES
@@ -217,6 +219,21 @@ def create_app(settings: Settings | None = None, engine: PlanningEngine | None =
             status_code=exc.status_code,
             content=error_body(exc.code, exc.message, exc.issues, request_id),
         )
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_error_handler(
+        request: Request, exc: StarletteHTTPException
+    ) -> JSONResponse:
+        request_id = getattr(request.state, "request_id", "unknown")
+        if exc.status_code == 404:
+            return JSONResponse(
+                status_code=404,
+                content=error_body(
+                    ErrorCode.NOT_FOUND, "未找到该接口或资源", [], request_id
+                ),
+            )
+        # 契约 ErrorCode 尚未定义 405 等状态，保留框架默认 body，等 T01 补齐后再统一。
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
     @app.exception_handler(RequestValidationError)
     async def validation_handler(

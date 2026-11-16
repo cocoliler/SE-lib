@@ -1,4 +1,4 @@
-# 本地运行脚本（无热重载；有 frontend/dist 时由后端同源提供静态前端）
+﻿# 本地运行脚本（无热重载；有 frontend/dist 时由后端同源提供静态前端）
 # 用法（在 backend 目录下）： .\scripts\start.ps1 [-Port 8000]
 
 param([int]$Port = 8000)
