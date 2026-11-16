@@ -8,8 +8,6 @@ import re
 from collections.abc import Mapping, Sequence
 
 import httpx
-from pydantic import ValidationError
-
 from flowstudio_contracts import PlanningMode, TokenUsage
 from flowstudio_contracts.constants import MAX_BODY_BYTES
 
@@ -26,7 +24,25 @@ _API_URL = "https://api.deepseek.com/chat/completions"
 _MODEL_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,119}")
 _REQUEST_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,119}")
 _FINISH_REASONS = frozenset({"stop", "length", "content_filter", "tool_calls", "insufficient_system_resource"})
-_USAGE_FIELDS = ("prompt_tokens", "completion_tokens", "total_tokens")
+
+def _usage_count(raw_value: object) -> int | None:
+    return raw_value if type(raw_value) is int and raw_value >= 0 else None
+
+
+def _parse_usage(raw_usage: object) -> TokenUsage | None:
+    if not isinstance(raw_usage, dict):
+        return None
+    prompt = _usage_count(raw_usage.get("prompt_tokens"))
+    completion = _usage_count(raw_usage.get("completion_tokens"))
+    total = _usage_count(raw_usage.get("total_tokens"))
+    known_parts = (prompt or 0) + (completion or 0)
+    # 不一致时保留可用于保守记账的较大一侧，无法同时成立的数值保持未知。
+    if total is not None:
+        if known_parts > total:
+            total = None
+        elif prompt is not None and completion is not None and total > known_parts:
+            prompt = completion = None
+    return TokenUsage(prompt_tokens=prompt, completion_tokens=completion, total_tokens=total)
 
 
 def _http_failure(status: int) -> ProviderFailureKind:
@@ -134,13 +150,7 @@ class DeepSeekProvider:
         if not isinstance(payload, dict):
             raise ProviderFailure(ProviderFailureKind.INVALID_RESPONSE, request_id=request_id)
         request_id = request_id or self._safe_request_id(payload.get("id"))
-        usage = None
-        raw_usage = payload.get("usage")
-        if isinstance(raw_usage, dict):
-            try:
-                usage = TokenUsage.model_validate({name: raw_usage.get(name) for name in _USAGE_FIELDS}, strict=True)
-            except ValidationError:
-                pass
+        usage = _parse_usage(payload.get("usage"))
         choices = payload.get("choices")
         if isinstance(choices, list) and len(choices) == 1 and isinstance(choices[0], dict):
             choice = choices[0]
@@ -148,8 +158,9 @@ class DeepSeekProvider:
             finish = choice.get("finish_reason")
             if isinstance(message, dict) and "content" in message:
                 text = message["content"]
-                safe_finish = None if finish is None else isinstance(finish, str) and finish in _FINISH_REASONS
-                if (finish is None or safe_finish) and (text is None or isinstance(text, str) and self._api_key not in text):
+                safe_finish = finish is None or isinstance(finish, str) and finish in _FINISH_REASONS
+                safe_content = text is None or isinstance(text, str) and self._api_key not in text
+                if safe_finish and safe_content:
                     return ProviderResponse(text, usage=usage, request_id=request_id, finish_reason=finish)
         raise ProviderFailure(ProviderFailureKind.INVALID_RESPONSE, request_id=request_id, usage=usage)
 

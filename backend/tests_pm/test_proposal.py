@@ -58,6 +58,18 @@ class ProposalParserTests(unittest.TestCase):
         self.assertNotIn("secret-payload-123", str(caught.exception))
         self.assertNotIn("private response", str(caught.exception))
 
+    def test_numeric_values_cannot_be_coerced_to_true_or_infinity(self):
+        proposal = json.loads(pm_support.example("task-proposal"))
+        effort = proposal["tasks"][0]["estimated_effort"]
+        for field, value in (("is_estimate", 1), ("is_estimate", 1.0), ("max_hours", 10 ** 309)):
+            payload = json.loads(json.dumps(proposal))
+            payload["tasks"][0]["estimated_effort"] = {**effort, field: value}
+            with self.subTest(field=field):
+                with self.assertRaises(ProposalError) as caught:
+                    parse_proposal(ProviderResponse(json.dumps(payload)))
+                self.assertEqual(caught.exception.code, RunFailureCode.MODEL_SCHEMA)
+                self.assertIn(f"/tasks/0/estimated_effort/{field}", str(caught.exception))
+
     def test_preserves_valid_unicode_supplementary_character(self):
         text = r'{"schema_version":"1.0","tasks":[],"blocking_questions":["\ud83d\ude00?"]}'
         self.assertEqual(parse_proposal(ProviderResponse(text)).blocking_questions, ["😀?"])
@@ -98,6 +110,19 @@ class CriticalAssumptionTests(unittest.TestCase):
             with_blocking_questions(TaskProposal.model_validate(self.payload))
         self.assertEqual(caught.exception.code, RunFailureCode.MODEL_SCHEMA)
         self.assertNotIn("长", str(caught.exception))
+
+    def test_reference_and_full_text_fit_in_different_existing_questions(self):
+        text = "假" * 80
+        self.payload["tasks"][0]["assumptions"][0]["text"] = text
+        self.payload["blocking_questions"] = [f"{i:02d}" + "问" * 1898 for i in range(MAX_BLOCKING_QUESTIONS)]
+        proposal = TaskProposal.model_validate(self.payload)
+        blocked = with_blocking_questions(proposal)
+        questions = "\n".join(blocked.blocking_questions)
+        self.assertTrue(all(question in questions for question in proposal.blocking_questions))
+        self.assertIn(text, questions)
+        self.assertIn("A-01", questions)
+        self.assertEqual(len(blocked.blocking_questions), MAX_BLOCKING_QUESTIONS)
+        self.assertEqual(with_blocking_questions(blocked), blocked)
 
     def test_max_length_critical_assumption_keeps_its_full_text(self):
         text = "假" * 2000

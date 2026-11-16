@@ -134,6 +134,29 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.usage, TokenUsage(prompt_tokens=9))
         self.assertEqual(result.request_id, "response-42")
 
+    async def test_malformed_and_contradictory_usage_preserve_the_larger_known_cost(self):
+        for raw_usage, expected in (
+            (
+                {"prompt_tokens": "incorrect", "completion_tokens": 8192, "total_tokens": 41_000},
+                TokenUsage(completion_tokens=8192, total_tokens=41_000),
+            ),
+            (
+                {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 41_000},
+                TokenUsage(total_tokens=41_000),
+            ),
+            (
+                {"prompt_tokens": 40_000, "completion_tokens": 20, "total_tokens": 2},
+                TokenUsage(prompt_tokens=40_000, completion_tokens=20),
+            ),
+        ):
+            def handle(_):
+                return httpx.Response(200, json=response_body(usage=raw_usage))
+
+            with self.subTest(raw_usage=raw_usage):
+                async with self.provider(handle) as provider:
+                    result = await self.complete(provider)
+                self.assertEqual(result.usage, expected)
+
     async def test_invalid_parameters_are_rejected_before_request(self):
         async with self.provider(lambda _: self.fail("invalid request touched transport")) as provider:
             for overrides in (

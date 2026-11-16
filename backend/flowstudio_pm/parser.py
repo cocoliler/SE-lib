@@ -103,14 +103,47 @@ def parse_proposal(response: ProviderResponse) -> TaskProposal:
     if issue:
         raise ProposalError(RunFailureCode.MODEL_SCHEMA, issue)
 
+    _check_estimate_literal(data)
     try:
-        return TaskProposal.model_validate_json(content, strict=True)
+        proposal = TaskProposal.model_validate_json(content, strict=True)
     except ValidationError as error:
         errors = error.errors(include_input=False, include_context=False, include_url=False)
         details = [(_pointer(item["loc"]), item["type"]) for item in errors[:_MAX_REPORTED_ERRORS]]
+    else:
+        _check_finite_estimates(proposal)
+        return proposal
     path = details[0][0]
     locations = "、".join(f"{location or '/'} ({kind})" for location, kind in details)
     raise ProposalError(RunFailureCode.MODEL_SCHEMA, f"提案结构不符合契约，检查 {locations}", path)
+
+
+def _check_estimate_literal(data: dict) -> None:
+    """Pydantic 的 Literal[True] 会接受数值 1，预检 JSON 字面值。"""
+    tasks = data.get("tasks")
+    if not isinstance(tasks, list):
+        return
+    for index, task in enumerate(tasks):
+        effort = task.get("estimated_effort") if isinstance(task, dict) else None
+        if isinstance(effort, dict) and "is_estimate" in effort and effort["is_estimate"] is not True:
+            raise ProposalError(
+                RunFailureCode.MODEL_SCHEMA,
+                "工时估算标记必须是 JSON true",
+                f"/tasks/{index}/estimated_effort/is_estimate",
+            )
+
+
+def _check_finite_estimates(proposal: TaskProposal) -> None:
+    """Pydantic 会把超大 JSON 整数转换为浮点无穷，校验转换结果。"""
+    for index, task in enumerate(proposal.tasks):
+        effort = task.estimated_effort
+        if effort is not None:
+            for field in ("min_hours", "max_hours"):
+                if not math.isfinite(getattr(effort, field)):
+                    raise ProposalError(
+                        RunFailureCode.MODEL_SCHEMA,
+                        "工时估算必须为有限数",
+                        f"/tasks/{index}/estimated_effort/{field}",
+                    )
 
 
 def with_blocking_questions(proposal: TaskProposal) -> TaskProposal:
@@ -122,12 +155,17 @@ def with_blocking_questions(proposal: TaskProposal) -> TaskProposal:
                 continue
             reference = f"请确认任务 {task.task_id} 的关键假设 {assumption.id}？"
             question = f"{reference}\n{assumption.text}"
-            if len(question) <= _MAX_QUESTION_CHARS:
-                _add_question(questions, question)
-            else:
-                # 合法假设正文可能已经占满单条问题的字符数，分别保留引用和正文。
-                _add_question(questions, reference)
-                _add_question(questions, assumption.text)
+            if _contains_question(questions, reference) and _contains_question(questions, assumption.text):
+                continue
+            if _add_question(questions, question):
+                continue
+            # 组合问句放不下时，分别寻找仍可容纳引用或完整正文的条目。
+            if not (_add_question(questions, reference) and _add_question(questions, assumption.text)):
+                raise ProposalError(
+                    RunFailureCode.MODEL_SCHEMA,
+                    "阻塞问题已达契约上限，无法完整表达所有关键假设",
+                    "/blocking_questions",
+                )
     if questions == proposal.blocking_questions:
         return proposal
     return TaskProposal.model_validate(
@@ -136,21 +174,23 @@ def with_blocking_questions(proposal: TaskProposal) -> TaskProposal:
     )
 
 
-def _add_question(questions: list[str], question: str) -> None:
+def _contains_question(questions: list[str], question: str) -> bool:
     wrapped = f"\n{question}\n"
-    if any(wrapped in f"\n{existing}\n" for existing in questions):
-        return
+    return any(wrapped in f"\n{existing}\n" for existing in questions)
+
+
+def _add_question(questions: list[str], question: str) -> bool:
+    if _contains_question(questions, question):
+        return True
+    if len(question) > _MAX_QUESTION_CHARS:
+        return False
     if len(questions) < MAX_BLOCKING_QUESTIONS:
         questions.append(question)
-        return
+        return True
     # 已用足条数时保留原问题行，在仍有空间的条目中追加完整问题。
     for index in range(len(questions) - 1, -1, -1):
         combined = f"{questions[index]}\n{question}"
         if len(combined) <= _MAX_QUESTION_CHARS:
             questions[index] = combined
-            return
-    raise ProposalError(
-        RunFailureCode.MODEL_SCHEMA,
-        "阻塞问题已达契约上限，无法完整表达所有关键假设",
-        "/blocking_questions",
-    )
+            return True
+    return False
