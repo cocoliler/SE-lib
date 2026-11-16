@@ -3,6 +3,7 @@
 import asyncio
 import json
 import unittest
+from unittest.mock import patch
 
 import pm_support
 from flowstudio_contracts import PlanningMode, RunFailureCode, TaskProposal, TokenUsage
@@ -222,8 +223,9 @@ class PlannerTests(unittest.IsolatedAsyncioTestCase):
             clock.now += 10
             return 100
 
-        result = await self.run_plan(provider, clock=clock, estimate_input_tokens=advancing_estimate)
-        self.assertEqual([x["timeout_seconds"] for x in provider.calls], [60, 60, 32])
+        with patch("flowstudio_pm.planner._snapshot_clock", side_effect=(10.0, 13.0)):
+            result = await self.run_plan(provider, clock=clock, estimate_input_tokens=advancing_estimate)
+        self.assertEqual([x["timeout_seconds"] for x in provider.calls], [60, 60, 29])
         self.assertIs(result.error.code, RunFailureCode.MODEL_TIMEOUT)
         self.assertIsNone(result.proposal)
         self.assertEqual(result.attempt_count, 3)

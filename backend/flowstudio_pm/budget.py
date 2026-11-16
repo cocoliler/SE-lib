@@ -27,9 +27,9 @@ class BudgetError(Exception):
 class RunBudget:
     """运行内同步扣账；每个实际请求各记一笔，完成后只结算一次。"""
 
-    def __init__(self, monotonic: Callable[[], float]) -> None:
+    def __init__(self, monotonic: Callable[[], float], *, elapsed_before_start: float = 0.0) -> None:
         self.monotonic = monotonic
-        self.deadline = monotonic() + PLANNING_DEADLINE_SECONDS
+        self.deadline = monotonic() + PLANNING_DEADLINE_SECONDS - elapsed_before_start
         self.attempt_count = 0
         self.accounted_tokens = 0
 

@@ -8,6 +8,7 @@ import time
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
+from time import monotonic as _snapshot_clock
 
 from flowstudio_contracts import (
     IssueSeverity,
@@ -89,7 +90,8 @@ class AttemptDiagnostic:
 class ProposalResult:
     """内部候选结果。具备 D 报告的候选通过了当前确定性规则。
 
-    proposal 用于候选或需补充输入。校验失败及后续失败的证据保存在 graph_check。
+    proposal 用于候选或需补充输入。graph_check 保留最近一次有结果的 D 检查，
+    latest_report_check 独立保留最近一次真实报告及其候选。
     """
 
     kind: ProposalKind
@@ -100,6 +102,7 @@ class ProposalResult:
     proposal: TaskProposal | None = field(default=None, repr=False)
     error: RunError | None = None
     graph_check: GraphCheck | None = field(default=None, repr=False)
+    latest_report_check: GraphCheck | None = field(default=None, repr=False)
     graph_failure: GraphFailure | None = None
 
     @property
@@ -231,9 +234,10 @@ async def _generate_proposal(
     validate_graph: bool,
 ) -> ProposalResult:
     """用同一循环处理结构修复、图修复与可重试的传输失败。"""
-    budget = RunBudget(monotonic)
+    snapshot_started = _snapshot_clock()
     diagnostics: list[AttemptDiagnostic] = []
     graph_check: GraphCheck | None = None
+    latest_report_check: GraphCheck | None = None
 
     def result(
         *,
@@ -253,13 +257,16 @@ async def _generate_proposal(
             proposal=proposal,
             error=error,
             graph_check=graph_check,
+            latest_report_check=latest_report_check,
             graph_failure=graph_failure,
         )
 
     try:
-        # 在 Provider、估算器等回调执行前隔离外部传入的可变模型。
+        # 先于注入时钟和 Provider 冻结输入，用内部单调时钟计入快照耗时。
         spec = spec.model_copy(deep=True)
         config = config.model_copy(deep=True)
+        budget = RunBudget(monotonic, elapsed_before_start=_snapshot_clock() - snapshot_started)
+        budget.check_deadline()
         if not _mode_matches(provider, mode, fixture_id):
             return result(error=_run_error(RunFailureCode.INTERNAL_ERROR, "规划模式与 Provider 或 fixture 不匹配"))
         model = config.model
@@ -267,6 +274,8 @@ async def _generate_proposal(
         if not isinstance(limits, ModelLimits):
             raise ValueError("模型限额无效")
         initial_prompt = build_prompt(spec, config, validate_graph=validate_graph)
+    except BudgetError as error:
+        return result(error=_run_error(error.code, str(error)))
     except (ValueError, TypeError):
         return result(error=_run_error(RunFailureCode.INTERNAL_ERROR, "规划模型配置或输入快照无效"))
 
@@ -340,6 +349,7 @@ async def _generate_proposal(
                     else:
                         budget.check_deadline()
                         graph_check = GraphCheck(budget.attempt_count, proposal, report=report)
+                        latest_report_check = graph_check
                         if report.errors:
                             graph_failure = GraphFailure.INVALID
                             if budget.has_attempts:

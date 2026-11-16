@@ -30,6 +30,16 @@ def missing_dependency(reference="T-Missing"):
     return payload
 
 
+def oversized_candidate():
+    payload = candidate()
+    template = payload["tasks"][0]
+    payload["tasks"] = [
+        dict(template, task_id=f"T-{index}", dependencies=[f"T-{upstream}" for upstream in range(index)])
+        for index in range(46)
+    ]
+    return payload
+
+
 class ValidatedPlannerTests(unittest.IsolatedAsyncioTestCase):
     async def run_plan(self, provider, *, clock=None, **changes):
         clock = clock or Clock()
@@ -201,12 +211,7 @@ class ValidatedPlannerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.graph_check.report.errors[0].code, IssueCode.MISSING_DEPENDENCY)
 
     async def test_actual_d_size_error_retains_limit_details_and_can_be_repaired(self):
-        payload = candidate()
-        template = payload["tasks"][0]
-        payload["tasks"] = [
-            dict(template, task_id=f"T-{index}", dependencies=[f"T-{upstream}" for upstream in range(index)])
-            for index in range(46)
-        ]
+        payload = oversized_candidate()
         overflow = response(payload)
         self.assertEqual(sum(len(task.dependencies) for task in TaskProposal.model_validate(payload).tasks), 1035)
         exhausted = await self.run_plan(SequenceProvider(overflow, overflow, overflow))
@@ -227,6 +232,76 @@ class ValidatedPlannerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(feedback["kind"], "graph_limit")
         self.assertEqual((feedback["limit"], feedback["actual"]), (MAX_EDGES, 1035))
         self.assertNotIn("issues", feedback)
+
+    async def test_size_rejection_preserves_latest_real_d_report_and_its_candidate(self):
+        spec = pm_support.spec_revision()
+        latest_invalid = missing_dependency("T-Recent")
+        overflow = oversized_candidate()
+        provider = SequenceProvider(response(missing_dependency("T-First")), response(latest_invalid), response(overflow))
+        result = await self.run_plan(provider, spec=spec)
+
+        self.assertIs(result.kind, ProposalKind.FAILED)
+        self.assertEqual(result.graph_failure.value, "GRAPH_LIMIT")
+        self.assertEqual(result.graph_check.attempt_index, 3)
+        self.assertEqual(result.graph_check.proposal, TaskProposal.model_validate(overflow))
+        self.assertIsNone(result.graph_check.report)
+        self.assertEqual(result.graph_check.limit.actual, 1035)
+
+        latest = getattr(result, "latest_report_check", None)
+        self.assertIsNotNone(latest, "D 拒绝规模后仍需保留上一次真实报告")
+        self.assertEqual(latest.attempt_index, 2)
+        self.assertEqual(latest.proposal, TaskProposal.model_validate(latest_invalid))
+        self.assertEqual(latest.report, validate_workflow(latest.proposal.tasks, spec.content))
+        self.assertEqual(latest.report.errors[0].code, IssueCode.MISSING_DEPENDENCY)
+        self.assertIn("T-Recent", latest.report.errors[0].message)
+
+    async def test_transport_or_structure_failure_keeps_both_prior_checks(self):
+        payload = missing_dependency()
+        for terminal, expected_error in (
+            (ProviderResponse("malformed", USAGE), RunFailureCode.MODEL_SCHEMA),
+            (ProviderFailure(ProviderFailureKind.AUTH), RunFailureCode.MODEL_AUTH),
+        ):
+            with self.subTest(error=expected_error):
+                provider = SequenceProvider(response(payload), response(oversized_candidate()), terminal)
+                result = await self.run_plan(provider)
+
+                self.assertIs(result.kind, ProposalKind.FAILED)
+                self.assertIs(result.error.code, expected_error)
+                self.assertEqual(result.graph_check.attempt_index, 2)
+                self.assertEqual(result.graph_check.limit.actual, 1035)
+                latest = getattr(result, "latest_report_check", None)
+                self.assertIsNotNone(latest, "结构或传输故障后仍需保留上一次真实报告")
+                self.assertEqual(latest.attempt_index, 1)
+                self.assertEqual(latest.proposal, TaskProposal.model_validate(payload))
+                self.assertEqual(latest.report.errors[0].code, IssueCode.MISSING_DEPENDENCY)
+
+    async def test_first_clock_callback_cannot_change_frozen_prompt_or_d_input(self):
+        clock = Clock()
+        spec = pm_support.spec_revision(supplemental_text="时钟回调前的规格")
+        original_spec = spec.content.model_copy(deep=True)
+
+        def mutating_clock():
+            spec.content.supplemental_text = "时钟回调修改"
+            return clock.monotonic()
+
+        provider = SequenceProvider(ProviderResponse(CANDIDATE, USAGE))
+        result = await self.run_plan(provider, spec=spec, monotonic=mutating_clock)
+
+        self.assertEqual(spec.content.supplemental_text, "时钟回调修改")
+        self.assertIs(result.kind, ProposalKind.CANDIDATE)
+        material = json.loads(provider.calls[0]["messages"][1]["content"])
+        self.assertEqual(material["spec"]["supplemental_text"], original_spec.supplemental_text)
+        self.assertEqual(result.graph_check.report, validate_workflow(result.proposal.tasks, original_spec))
+
+    async def test_freezing_inputs_consumes_the_global_deadline(self):
+        provider = SequenceProvider(ProviderResponse(CANDIDATE, USAGE))
+        with patch.object(planner, "_snapshot_clock", side_effect=(10.0, 190.0), create=True):
+            result = await self.run_plan(provider)
+
+        self.assertIs(result.kind, ProposalKind.FAILED)
+        self.assertIs(result.error.code, RunFailureCode.MODEL_TIMEOUT)
+        self.assertEqual(result.attempt_count, 0)
+        self.assertEqual(provider.calls, [])
 
     async def test_insufficient_remaining_tokens_prevent_graph_repair_request(self):
         provider = SequenceProvider(ProviderResponse(response(missing_dependency()).content))
