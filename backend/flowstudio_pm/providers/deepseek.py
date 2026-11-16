@@ -23,7 +23,28 @@ from ..types import (
 _API_URL = "https://api.deepseek.com/chat/completions"
 _MODEL_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,119}")
 _REQUEST_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,119}")
-_FINISH_REASONS = frozenset({"stop", "length", "content_filter", "tool_calls", "insufficient_system_resource"})
+_PARSER_FINISH_REASONS = frozenset({"stop", "length"})
+_TRANSIENT_FINISH_REASONS = frozenset({"insufficient_system_resource", "aborted"})
+_FINISH_REASONS = _PARSER_FINISH_REASONS | _TRANSIENT_FINISH_REASONS | {"content_filter", "tool_calls"}
+# 末尾引号可缺失，截断字串会被整体跳过，避免从其内部的转义引号重扫。
+_JSON_STRING = re.compile(r'"(?:[^"\\]++|\\[\s\S])*+"?')
+
+
+def _contains_credential(text: str, api_key: str) -> bool:
+    """检查原串及可解码的 JSON 键和值，不依赖整份内容可解析或嵌套深度。"""
+    if api_key in text:
+        return True
+    if "\\" not in text:
+        return False
+    for token in _JSON_STRING.finditer(text):
+        try:
+            value = json.loads(token[0])
+        except ValueError:
+            continue
+        if api_key in value:
+            return True
+    return False
+
 
 def _usage_count(raw_value: object) -> int | None:
     return raw_value if type(raw_value) is int and raw_value >= 0 else None
@@ -152,17 +173,31 @@ class DeepSeekProvider:
         request_id = request_id or self._safe_request_id(payload.get("id"))
         usage = _parse_usage(payload.get("usage"))
         choices = payload.get("choices")
-        if isinstance(choices, list) and len(choices) == 1 and isinstance(choices[0], dict):
-            choice = choices[0]
-            message = choice.get("message")
-            finish = choice.get("finish_reason")
-            if isinstance(message, dict) and "content" in message:
-                text = message["content"]
-                safe_finish = finish is None or isinstance(finish, str) and finish in _FINISH_REASONS
-                safe_content = text is None or isinstance(text, str) and self._api_key not in text
-                if safe_finish and safe_content:
-                    return ProviderResponse(text, usage=usage, request_id=request_id, finish_reason=finish)
-        raise ProviderFailure(ProviderFailureKind.INVALID_RESPONSE, request_id=request_id, usage=usage)
+        if not isinstance(choices, list) or len(choices) != 1 or not isinstance(choices[0], dict):
+            raise ProviderFailure(ProviderFailureKind.INVALID_RESPONSE, request_id=request_id, usage=usage)
+
+        choice = choices[0]
+        message = choice.get("message")
+        raw_finish = choice.get("finish_reason")
+        finish = raw_finish if isinstance(raw_finish, str) and raw_finish in _FINISH_REASONS else None
+        text = message.get("content") if isinstance(message, dict) else None
+        if isinstance(text, str) and _contains_credential(text, self._api_key):
+            raise ProviderFailure(
+                ProviderFailureKind.INVALID_RESPONSE, request_id=request_id, usage=usage, finish_reason=finish,
+            )
+        if (
+            finish in _PARSER_FINISH_REASONS and isinstance(message, dict) and "content" in message
+            and (text is None or isinstance(text, str))
+        ):
+            return ProviderResponse(text, usage=usage, request_id=request_id, finish_reason=finish)
+        kind = (
+            ProviderFailureKind.TRANSIENT_SERVER if finish in _TRANSIENT_FINISH_REASONS
+            else ProviderFailureKind.INVALID_RESPONSE
+        )
+        raise ProviderFailure(
+            kind, request_id=request_id, usage=usage, finish_reason=finish,
+            content=text if isinstance(text, str) else None,
+        )
 
     async def aclose(self) -> None:
         """关闭当前 Provider 持有的客户端与连接池。"""

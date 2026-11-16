@@ -374,7 +374,9 @@ async def _generate_proposal(
             prompt_hash=prompt_hash,
             response_hash=response_hash,
             provider_request_id=request_id,
-            finish_reason=response.finish_reason if response is not None else None,
+            finish_reason=(
+                response.finish_reason if response is not None else failure.finish_reason if failure is not None else None
+            ),
             elapsed_seconds=monotonic() - started,
             reserved_tokens=reserved,
             accounted_tokens=accounted,

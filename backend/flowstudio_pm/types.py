@@ -77,7 +77,7 @@ _FAILURE_MESSAGES = {
 
 
 class ProviderFailure(Exception):
-    """单次请求失败。消息只使用本地固定文本，隔离第三方响应和 SDK 错误。"""
+    """单次请求失败，可保留通过凭据检查的回复正文供显式验收。"""
 
     def __init__(
         self,
@@ -85,8 +85,12 @@ class ProviderFailure(Exception):
         *,
         request_id: str | None = None,
         usage: TokenUsage | None = None,
+        finish_reason: str | None = None,
+        content: str | None = None,
     ) -> None:
         super().__init__(_FAILURE_MESSAGES[kind])
         self.kind = kind
         self.request_id = request_id
         self.usage = usage
+        self.finish_reason = finish_reason
+        self.content = content

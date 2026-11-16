@@ -7,6 +7,7 @@ import unittest
 import httpx
 import pm_support
 from flowstudio_contracts import PlanningMode, TokenUsage
+from flowstudio_pm import generate_validated_proposal
 from flowstudio_pm.providers.deepseek import DeepSeekProvider
 from flowstudio_pm.providers.fixture import TestFixtureProvider
 from flowstudio_pm.types import ModelLimits, ProviderFailure, ProviderFailureKind, ProviderResponse
@@ -123,6 +124,77 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
                 await self.complete(provider)
         self.assertIs(caught.exception.kind, ProviderFailureKind.INVALID_RESPONSE)
         self.assertEqual(caught.exception.usage, TokenUsage(total_tokens=42))
+
+    async def test_invalid_or_filtered_finish_cannot_yield_a_candidate(self):
+        for finish in (None, "missing", "unrecognized", [], "content_filter", "tool_calls"):
+            reply = response_body(finish=finish, usage={"total_tokens": 42})
+            if finish == "missing":
+                del reply["choices"][0]["finish_reason"]
+
+            with self.subTest(finish=finish):
+                async with self.provider(lambda _: httpx.Response(200, json=reply)) as provider:
+                    with self.assertRaises(ProviderFailure) as caught:
+                        await self.complete(provider)
+                self.assertIs(caught.exception.kind, ProviderFailureKind.INVALID_RESPONSE)
+                self.assertEqual(caught.exception.usage, TokenUsage(total_tokens=42))
+                self.assertEqual(caught.exception.request_id, "response-42")
+
+    async def test_temporary_finish_uses_the_shared_one_retry_budget(self):
+        for first, second in (
+            ("aborted", "insufficient_system_resource"),
+            ("insufficient_system_resource", "aborted"),
+        ):
+            replies = iter((first, second))
+            calls = []
+            delays = []
+
+            def handle(_):
+                calls.append(next(replies))
+                return httpx.Response(200, json=response_body(
+                    pm_support.example("task-proposal"),
+                    finish=calls[-1],
+                    usage={"total_tokens": 42},
+                ))
+
+            async def record_delay(seconds):
+                delays.append(seconds)
+
+            with self.subTest(first=first):
+                async with self.provider(handle) as provider:
+                    result = await generate_validated_proposal(
+                        pm_support.spec_revision(), pm_support.config(), PlanningMode.REAL,
+                        provider, sleep=record_delay, estimate_input_tokens=lambda _: 1,
+                    )
+                self.assertEqual(calls, [first, second])
+                self.assertEqual(len(delays), 1)
+                self.assertEqual(result.kind.value, "FAILED")
+                self.assertEqual(result.usage, TokenUsage(total_tokens=84))
+                self.assertEqual(
+                    [(item.provider_failure, item.finish_reason, item.provider_request_id) for item in result.diagnostics],
+                    [(ProviderFailureKind.TRANSIENT_SERVER, finish, "response-42") for finish in calls],
+                )
+
+    async def test_rejects_literal_and_decoded_credential_echoes(self):
+        escaped_key = r"\u0064" + DUMMY_KEY[1:]
+        for content in (
+            json.dumps({"nested": [{"field": DUMMY_KEY}]}),
+            '{"nested":[{"field":"' + escaped_key + '"}]}',
+            '{"nested":[{"' + escaped_key + '":1}]}',
+            '[' * 1500 + '"' + escaped_key + '"' + ']' * 1500,
+            '{"unfinished":"' + escaped_key + '",',
+        ):
+            with self.subTest(length=len(content)):
+                def handle(_):
+                    return httpx.Response(200, json=response_body(content, usage={"total_tokens": 42}))
+
+                async with self.provider(handle) as provider:
+                    with self.assertRaises(ProviderFailure) as caught:
+                        await self.complete(provider)
+                self.assertIs(caught.exception.kind, ProviderFailureKind.INVALID_RESPONSE)
+                self.assertEqual(caught.exception.usage, TokenUsage(total_tokens=42))
+                self.assertIsNone(getattr(caught.exception, "content", None))
+                self.assertNotIn(DUMMY_KEY, repr(caught.exception))
+                self.assertIsNone(caught.exception.__context__)
 
     async def test_partial_usage_and_missing_choice_content_are_preserved(self):
         def handle(_):
