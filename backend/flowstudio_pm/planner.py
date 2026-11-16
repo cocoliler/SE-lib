@@ -153,7 +153,7 @@ def _mode_matches(provider: LLMProvider, mode: PlanningMode, fixture_id: str | N
     return False
 
 
-def _response_hash(response: ProviderResponse | None) -> str | None:
+def _response_hash(response: ProviderResponse | ProviderFailure | None) -> str | None:
     if response is None or response.content is None:
         return None
     # surrogatepass 只供散列编码。解析器仍拒绝包含孤立代理码点的回复。
@@ -362,7 +362,7 @@ async def _generate_proposal(
 
         if budget.has_attempts and repair_error is not None and response is not None:
             next_prompt = initial_prompt.with_repair(response, repair_error)
-        response_hash = _response_hash(response)
+        response_hash = _response_hash(response if response is not None else failure)
         try:
             budget.check_deadline()
         except BudgetError as error:

@@ -239,9 +239,51 @@ class RealValidationTests(unittest.TestCase):
                 self.assertEqual(evidence["error"]["code"], "MODEL_SCHEMA")
                 attempt, = evidence["attempts"]
                 self.assertEqual(attempt["content"], expected)
+                expected_hash = hashlib.sha256(expected.encode("utf-8")).hexdigest() if expected is not None else None
+                self.assertEqual(attempt["response_hash"], expected_hash)
                 self.assertNotIn(escaped_key, self.evidence_path.read_text(encoding="utf-8"))
                 self.assertEqual(attempt["finish_reason"], finish)
+                self.assertEqual(attempt["provider_request_id"], "request-1")
                 self.assertEqual(attempt["actual_usage"]["total_tokens"], 42)
+
+    def test_length_echo_is_truncated_without_passing_body_to_repair_or_evidence(self):
+        escaped_key = r"\u0064" + DUMMY_KEY[1:]
+        for index, content in enumerate((DUMMY_KEY, '{"field":"' + escaped_key + '"}')):
+            with self.subTest(index=index):
+                self.evidence_path = self.folder / f"truncated-{index}.json"
+                code, evidence, requests = self.simulate((content, "length"), (CANDIDATE, "stop"))
+                self.assertEqual(code, 0)
+                first, repaired = evidence["attempts"]
+                self.assertEqual(first["error_code"], "MODEL_TRUNCATED")
+                self.assertEqual(first["finish_reason"], "length")
+                self.assertEqual(first["provider_request_id"], "request-1")
+                self.assertEqual(first["actual_usage"]["total_tokens"], 42)
+                self.assertIsNone(first["content"])
+                self.assertIsNone(first["response_hash"])
+                feedback = json.loads(requests[1]["messages"][1]["content"])["repair"]
+                self.assertEqual(feedback["previous_content"], "")
+                self.assertEqual(repaired["response_hash"], hashlib.sha256(CANDIDATE.encode("utf-8")).hexdigest())
+                self.assertEqual(evidence["usage"]["total_tokens"], 84)
+
+    def test_interrupted_echo_is_not_recorded_and_uses_shared_transport_retry(self):
+        escaped_key = r"\u0064" + DUMMY_KEY[1:]
+        code, evidence, requests = self.simulate(
+            (DUMMY_KEY, "aborted"), ('{"' + escaped_key + '":true}', "insufficient_system_resource"),
+        )
+        self.assertEqual(code, 1)
+        self.assertEqual(evidence["error"]["code"], "MODEL_NETWORK")
+        self.assertEqual(evidence["usage"]["total_tokens"], 84)
+        self.assertEqual(requests[0], requests[1])
+        self.assertEqual(
+            [attempt["finish_reason"] for attempt in evidence["attempts"]],
+            ["aborted", "insufficient_system_resource"],
+        )
+        for index, attempt in enumerate(evidence["attempts"], start=1):
+            self.assertEqual(attempt["provider_request_id"], f"request-{index}")
+            self.assertEqual(attempt["provider_failure"], "transient_server")
+            self.assertEqual(attempt["actual_usage"]["total_tokens"], 42)
+            self.assertIsNone(attempt["content"])
+            self.assertIsNone(attempt["response_hash"])
 
     def test_needs_input_exit_is_nonzero(self):
         code, evidence, _ = self.simulate((BLOCKED, "stop"))

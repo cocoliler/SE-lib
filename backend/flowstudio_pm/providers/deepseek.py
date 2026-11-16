@@ -181,12 +181,13 @@ class DeepSeekProvider:
         raw_finish = choice.get("finish_reason")
         finish = raw_finish if isinstance(raw_finish, str) and raw_finish in _FINISH_REASONS else None
         text = message.get("content") if isinstance(message, dict) else None
-        if isinstance(text, str) and _contains_credential(text, self._api_key):
-            raise ProviderFailure(
-                ProviderFailureKind.INVALID_RESPONSE, request_id=request_id, usage=usage, finish_reason=finish,
-            )
+        echoed_credential = isinstance(text, str) and _contains_credential(text, self._api_key)
+        if echoed_credential:
+            # 丢弃回显正文，同时保留截断和临时服务中断的处理语义。
+            text = None
         if (
             finish in _PARSER_FINISH_REASONS and isinstance(message, dict) and "content" in message
+            and (not echoed_credential or finish == "length")
             and (text is None or isinstance(text, str))
         ):
             return ProviderResponse(text, usage=usage, request_id=request_id, finish_reason=finish)

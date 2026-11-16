@@ -196,6 +196,21 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
                 self.assertNotIn(DUMMY_KEY, repr(caught.exception))
                 self.assertIsNone(caught.exception.__context__)
 
+    async def test_credential_echo_is_removed_before_length_reaches_parser(self):
+        for content in (DUMMY_KEY, '"' + r"\u0064" + DUMMY_KEY[1:] + '"'):
+            with self.subTest(content_length=len(content)):
+                async with self.provider(lambda _: httpx.Response(200, json=response_body(
+                    content, finish="length", usage={"total_tokens": 42},
+                ))) as provider:
+                    try:
+                        response = await self.complete(provider)
+                    except ProviderFailure as error:
+                        self.fail(f"截断仍需由解析器处理，Provider 返回了 {error.kind}")
+                self.assertIsNone(response.content)
+                self.assertEqual(response.finish_reason, "length")
+                self.assertEqual(response.usage, TokenUsage(total_tokens=42))
+                self.assertEqual(response.request_id, "response-42")
+
     async def test_partial_usage_and_missing_choice_content_are_preserved(self):
         def handle(_):
             return httpx.Response(200, json=response_body(None, usage={"prompt_tokens": 9, "provider_extension": 100}))
