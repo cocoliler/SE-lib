@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 
 from flowstudio_contracts import (
@@ -49,6 +50,20 @@ class Prompt:
     @property
     def hash(self) -> str:
         return sha256_hex({"version": self.version, "messages": self.messages})
+    def with_repair(self, response: ProviderResponse, error: ProposalError) -> Prompt:
+        """复用不可变输入快照，并附上可用于修复的有限回复。"""
+        material = json.loads(self.material)
+        previous = response.content or ""
+        encoded = previous[:MAX_REPAIR_RESPONSE_BYTES].encode("utf-8", errors="replace")
+        preview = encoded[:MAX_REPAIR_RESPONSE_BYTES].decode("utf-8", errors="ignore")
+        material["repair"] = {
+            "code": error.code.value,
+            "path": error.path,
+            "diagnostic": str(error),
+            "previous_content": preview,
+            "previous_content_truncated": previous != preview,
+        }
+        return Prompt(self.system, canonical_json(material), self.version)
 
 
 def build_prompt(
@@ -66,16 +81,5 @@ def build_prompt(
         "task_proposal_schema": _SCHEMA,
         "limits": {"tasks": MAX_TASKS, "dependency_edges": MAX_EDGES, "blocking_questions": MAX_BLOCKING_QUESTIONS},
     }
-    if repair is not None:
-        response, error = repair
-        previous = response.content or ""
-        encoded = previous[:MAX_REPAIR_RESPONSE_BYTES].encode("utf-8", errors="replace")
-        preview = encoded[:MAX_REPAIR_RESPONSE_BYTES].decode("utf-8", errors="ignore")
-        material["repair"] = {
-            "code": error.code.value,
-            "path": error.path,
-            "diagnostic": str(error),
-            "previous_content": preview,
-            "previous_content_truncated": previous != preview,
-        }
-    return Prompt(_SYSTEM + _REPAIR, canonical_json(material))
+    prompt = Prompt(_SYSTEM + _REPAIR, canonical_json(material))
+    return prompt if repair is None else prompt.with_repair(*repair)
