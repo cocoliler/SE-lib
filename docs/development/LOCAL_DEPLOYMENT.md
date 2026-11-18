@@ -52,3 +52,17 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start.ps1
 - 前端：`npm.cmd run build`、`npm.cmd test`、`npm.cmd run test:browser`。浏览器测试读取生产构建，可设置 `CHROME_BIN` 和 `FLOWSTUDIO_TEST_BACKEND_URL`。
 - 后端：使用后端虚拟环境的 Python，在仓库根目录运行 `python -m pytest backend/tests backend/tests_pm`。契约检查见[工程组织](PROJECT_STRUCTURE.md)。
 - HTTP 冒烟：在 `backend` 目录以虚拟环境的 Python 运行 `python scripts/e2e_smoke.py --base-url http://127.0.0.1:8000`，使用 TEST 样例校验规格、规划、保存、布局和导出。
+
+首次在干净环境验证可运行：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify_all.ps1 -Bootstrap
+```
+
+依赖已安装时，一键执行全部 TEST 基线：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify_all.ps1
+```
+
+脚本会执行后端测试、T05、契约与 OpenAPI 检查、前端构建、领域测试、浏览器回归，并自动启动同源后端完成浏览器联调和 HTTP 端到端测试。结果写入 `evidence/runs/<timestamp>/summary.md` 和原始 `logs/`。可使用 `-SkipBrowser` 或 `-SkipHttp` 跳过当前机器不可用的层；REAL 验收始终独立执行，不由该脚本伪造。
