@@ -1,0 +1,355 @@
+{
+  "schema_version": "1.0",
+  "tasks": [
+    {
+      "task_id": "T01",
+      "name": "预约领域模型与多园区时区设计",
+      "description": "定义园区、房间、预约、审批、访客授权与审计记录的领域模型，并确定按时区展示可用时段的规则。",
+      "category": "design",
+      "stage": "design",
+      "priority": "high",
+      "assigned_role": "architect",
+      "dependencies": [],
+      "inputs": [],
+      "deliverables": [
+        {
+          "id": "doc",
+          "text": "领域模型与多园区时区设计说明"
+        }
+      ],
+      "acceptance_criteria": [
+        "停用房间有明确状态字段并可被检索排除",
+        "同一预约在不同时区终端上换算为同一实际占用时段"
+      ],
+      "source_requirement_ids": [
+        "R01",
+        "R07"
+      ],
+      "rationale": "检索与权限都依赖统一的房间与预约模型，先定模型可避免后续返工。",
+      "assumptions": [],
+      "estimated_effort": null
+    },
+    {
+      "task_id": "T02",
+      "name": "会议室检索与可用时段查询",
+      "description": "实现按园区、时间、容量和设备筛选会议室，排除停用房间与已占用时段。",
+      "category": "build",
+      "stage": "build",
+      "priority": "high",
+      "assigned_role": "engineer",
+      "dependencies": [
+        "T01"
+      ],
+      "inputs": [
+        {
+          "kind": "task",
+          "task_id": "T01",
+          "deliverable_id": "doc"
+        }
+      ],
+      "deliverables": [
+        {
+          "id": "doc",
+          "text": "检索接口与可用时段计算实现"
+        }
+      ],
+      "acceptance_criteria": [
+        "停用房间不会出现在可预约结果中",
+        "跨时区终端展示同一实际占用时段"
+      ],
+      "source_requirement_ids": [
+        "R01"
+      ],
+      "rationale": "检索是预约入口，必须先于创建流程可用。",
+      "assumptions": [],
+      "estimated_effort": null
+    },
+    {
+      "task_id": "T03",
+      "name": "预约创建、改期与取消（含并发抢占）",
+      "description": "实现预约的创建、改期和取消；服务端保证同一房间重叠时段最多一笔有效占用，并处理重复提交。",
+      "category": "build",
+      "stage": "build",
+      "priority": "high",
+      "assigned_role": "engineer",
+      "dependencies": [
+        "T01"
+      ],
+      "inputs": [
+        {
+          "kind": "task",
+          "task_id": "T01",
+          "deliverable_id": "doc"
+        }
+      ],
+      "deliverables": [
+        {
+          "id": "doc",
+          "text": "预约写接口与并发占用保证实现"
+        }
+      ],
+      "acceptance_criteria": [
+        "并发提交冲突时段只有一个请求成功",
+        "重复提交不产生第二笔预约",
+        "改期冲突时原预约保持不变"
+      ],
+      "source_requirement_ids": [
+        "R02"
+      ],
+      "rationale": "占用一致性是后续审批、访客同步与通知的共同前提。",
+      "assumptions": [],
+      "estimated_effort": null
+    },
+    {
+      "task_id": "T04",
+      "name": "周期会议冲突预览与批量创建",
+      "description": "支持按周重复会议，提交前列出每次冲突日期，确认后跳过冲突场次创建其余场次，并支持取消单场或整组未开始场次。",
+      "category": "build",
+      "stage": "build",
+      "priority": "medium",
+      "assigned_role": "engineer",
+      "dependencies": [
+        "T03"
+      ],
+      "inputs": [
+        {
+          "kind": "task",
+          "task_id": "T03",
+          "deliverable_id": "doc"
+        }
+      ],
+      "deliverables": [
+        {
+          "id": "doc",
+          "text": "周期会议预览与批量创建实现"
+        }
+      ],
+      "acceptance_criteria": [
+        "六周会议两次冲突时预览列出具体日期，确认后只创建四次",
+        "取消单场不释放同组其他场次占用"
+      ],
+      "source_requirement_ids": [
+        "R03"
+      ],
+      "rationale": "周期会议复用单次预约的占用规则，需在其之后实现。",
+      "assumptions": [],
+      "estimated_effort": null
+    },
+    {
+      "task_id": "T05",
+      "name": "行政审批流与超时释放",
+      "description": "大型会议室与含外部访客的预约进入审批；待审批暂占时段，拒绝或超时后释放，审批通过前不得下发访客权限。",
+      "category": "build",
+      "stage": "build",
+      "priority": "high",
+      "assigned_role": "engineer",
+      "dependencies": [
+        "T03"
+      ],
+      "inputs": [
+        {
+          "kind": "task",
+          "task_id": "T03",
+          "deliverable_id": "doc"
+        }
+      ],
+      "deliverables": [
+        {
+          "id": "doc",
+          "text": "审批流程与超时释放实现"
+        }
+      ],
+      "acceptance_criteria": [
+        "行政可批准或拒绝并留下处理记录",
+        "超过 30 分钟未审批自动释放时段",
+        "重复审批不会重复下发访客权限"
+      ],
+      "source_requirement_ids": [
+        "R04"
+      ],
+      "rationale": "审批决定访客权限能否下发，必须先于同步实现。",
+      "assumptions": [],
+      "estimated_effort": null
+    },
+    {
+      "task_id": "T06",
+      "name": "访客权限同步与幂等重试",
+      "description": "预约通过后同步访客权限，改期更新有效期，取消撤销权限；同步失败自动重试并在工作台展示状态。",
+      "category": "build",
+      "stage": "build",
+      "priority": "high",
+      "assigned_role": "engineer",
+      "dependencies": [
+        "T05"
+      ],
+      "inputs": [
+        {
+          "kind": "task",
+          "task_id": "T05",
+          "deliverable_id": "doc"
+        }
+      ],
+      "deliverables": [
+        {
+          "id": "doc",
+          "text": "访客权限同步与重试任务实现"
+        }
+      ],
+      "acceptance_criteria": [
+        "超时后重试不会对同一访客重复授权",
+        "取消后延迟返回的授权不会恢复过期权限",
+        "多次失败原因可在工作台查看并手动重试"
+      ],
+      "source_requirement_ids": [
+        "R05"
+      ],
+      "rationale": "权限下发受审批结果驱动，因此依赖审批任务。",
+      "assumptions": [],
+      "estimated_effort": null
+    },
+    {
+      "task_id": "T07",
+      "name": "通知与会前提醒版本控制",
+      "description": "向发起人发送预约确认、改期、取消和会前提醒；改期后只按新时间提醒，通知失败可补发。",
+      "category": "build",
+      "stage": "build",
+      "priority": "medium",
+      "assigned_role": "engineer",
+      "dependencies": [
+        "T03"
+      ],
+      "inputs": [
+        {
+          "kind": "task",
+          "task_id": "T03",
+          "deliverable_id": "doc"
+        }
+      ],
+      "deliverables": [
+        {
+          "id": "doc",
+          "text": "通知发送与提醒版本控制实现"
+        }
+      ],
+      "acceptance_criteria": [
+        "改期后只按新时间发送会前提醒",
+        "通知故障期间预约仍可在工作台查询"
+      ],
+      "source_requirement_ids": [
+        "R06"
+      ],
+      "rationale": "通知以预约状态变更为触发源。",
+      "assumptions": [],
+      "estimated_effort": null
+    },
+    {
+      "task_id": "T08",
+      "name": "房间临时停用与替代房间推荐",
+      "description": "行政可临时停用房间并查看受影响的未来预约，系统提供容量与设备相近的候选房间供发起人确认改期。",
+      "category": "build",
+      "stage": "build",
+      "priority": "medium",
+      "assigned_role": "engineer",
+      "dependencies": [
+        "T02",
+        "T03"
+      ],
+      "inputs": [
+        {
+          "kind": "task",
+          "task_id": "T02",
+          "deliverable_id": "doc"
+        },
+        {
+          "kind": "task",
+          "task_id": "T03",
+          "deliverable_id": "doc"
+        }
+      ],
+      "deliverables": [
+        {
+          "id": "doc",
+          "text": "停用流程与替代房间推荐实现"
+        }
+      ],
+      "acceptance_criteria": [
+        "停用后立即阻止新预约",
+        "受影响清单只包含与停用时段重叠的未来预约",
+        "选择替代房间时重新校验可用性"
+      ],
+      "source_requirement_ids": [
+        "R08"
+      ],
+      "rationale": "停用需要检索能力与预约数据，二者均已完成后再实现。",
+      "assumptions": [],
+      "estimated_effort": null
+    },
+    {
+      "task_id": "T09",
+      "name": "角色权限、审计记录与验收",
+      "description": "按角色限制数据访问并记录操作者与时间，完成员工、行政、前台三角色的端到端验收。",
+      "category": "verify",
+      "stage": "verify",
+      "priority": "high",
+      "assigned_role": "qa",
+      "dependencies": [
+        "T02",
+        "T04",
+        "T05",
+        "T06",
+        "T07",
+        "T08"
+      ],
+      "inputs": [
+        {
+          "kind": "task",
+          "task_id": "T02",
+          "deliverable_id": "doc"
+        },
+        {
+          "kind": "task",
+          "task_id": "T04",
+          "deliverable_id": "doc"
+        },
+        {
+          "kind": "task",
+          "task_id": "T05",
+          "deliverable_id": "doc"
+        },
+        {
+          "kind": "task",
+          "task_id": "T06",
+          "deliverable_id": "doc"
+        },
+        {
+          "kind": "task",
+          "task_id": "T07",
+          "deliverable_id": "doc"
+        },
+        {
+          "kind": "task",
+          "task_id": "T08",
+          "deliverable_id": "doc"
+        }
+      ],
+      "deliverables": [
+        {
+          "id": "doc",
+          "text": "权限与审计验收记录"
+        }
+      ],
+      "acceptance_criteria": [
+        "员工无法读取他人访客证件信息",
+        "前台无法查询其他园区访客名单",
+        "管理员可按预约 ID 查询完整处理记录"
+      ],
+      "source_requirement_ids": [
+        "R07"
+      ],
+      "rationale": "权限与审计需要覆盖全部已实现路径，放在最后统一验收。",
+      "assumptions": [],
+      "estimated_effort": null
+    }
+  ],
+  "blocking_questions": []
+}
