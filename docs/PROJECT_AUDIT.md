@@ -1,6 +1,6 @@
 # 当前实现审计与迁移
 
-更新于 2026-11-16。当前版本连接了浏览器工作台、规划服务、确定性编排与计划版本存储。
+更新于 2026-11-18。当前 P0 闭环、REAL 验收、人工语义评审、质量测量与交付证据均已完成。
 
 | 范围 | 当前实现 |
 |---|---|
@@ -11,7 +11,9 @@
 | 服务端保存 | [后端工作区](../frontend/src/backend-panel.tsx)使用 [HTTP 客户端](../frontend/src/api/client.ts)管理规格、规划运行、计划版本和布局。正式保存记录规划来源和已确认假设；布局独立更新，完整导出使用 ExportBundle。 |
 | 画布 | [React Flow 画布](../frontend/src/canvas.tsx)支持搜索定位、拖动、连线、平移、缩放、注释和 PNG。 |
 | 实际执行 | 当前产物是供团队审核和执行的任务计划；自动执行、工件检查与监督属于后续范围。 |
+| REAL 验收 | 用户规格以 `deepseek-flash`、`pm-v1` 完成 baseline、需求变化和粒度变化；记录 attempt、usage、耗时、候选与人工评审。 |
+| 质量测量 | Q01–Q08 完成；100 任务编排、100 次保存、100 任务/200 边画布、恢复和安全均有实测记录。 |
 
 浏览器存储与服务端版本独立。已有 `flowstudio.workspace.v1` 中的旧注释坐标仍可读取，下一次保存使用平铺的 `x/y`。旧 CLI 在独立分支，其存储迁移需另行评估。
 
-验证入口见[前端说明](../frontend/README.md)和[部署说明](development/LOCAL_DEPLOYMENT.md)。浏览器联调使用固定样例覆盖端到端保存流程，模型回归使用模拟提供商覆盖真实模式及图修复，避免验收依赖密钥和外部服务。
+验证入口见[前端说明](../frontend/README.md)和[部署说明](development/LOCAL_DEPLOYMENT.md)。统一门禁为 `scripts/verify_all.ps1`，质量加 `-Quality`；REAL 见[真实验收报告](testing/REAL_ACCEPTANCE_REPORT.md)，质量见[质量验收报告](testing/QUALITY_ACCEPTANCE_REPORT.md)。

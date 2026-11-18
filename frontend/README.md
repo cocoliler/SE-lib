@@ -24,6 +24,9 @@
 npm.cmd run build
 npm.cmd test
 npm.cmd run test:browser
+npm.cmd run test:performance
 ```
 
 浏览器测试使用生产构建及 Chrome、Chromium 或 Edge，可用 `CHROME_BIN` 指定浏览器。设置 `FLOWSTUDIO_TEST_BACKEND_URL` 可增加真实 HTTP 联调。测试会在该后端创建项目并执行 `diamond` 固定样例，请使用独立测试数据库。
+
+`test:performance` 使用 100 任务/200 边生产构建，测量首屏可交互时间、三次拖动帧率、键盘焦点和浅/深色对比度。

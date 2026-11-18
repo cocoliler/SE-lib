@@ -36,13 +36,13 @@
 | 实时 | REST 轮询 vs SSE vs WebSocket | P0 轮询；P2 单向运行事件用 SSE；无实时多人协作，不选 WebSocket |
 | 工程 | 单体 vs 微服务/队列 | 单进程、持久 PlanningRun + 有界队列；中断显式失败，不引入 Redis/Docker |
 
-框架层（FastAPI/uvicorn/SQLAlchemy）已做本机启动探针，业务后端与 SQLite 落库仍未搭建。
+FastAPI、SQLAlchemy、SQLite/Alembic、项目/规格/规划/计划 API、P0 HTTP 验收与真实模型调用均已落地；跨平台兼容仍以各自环境实测为准。
 
 ---
 
 ## 2 架构决策记录
 
-状态：本轮设计推荐，待团队实施验证。日期 2026-11-15。
+状态：P0 决策已实施并经统一验收验证；P2 框架实验仍待后续验证。更新于 2026-11-18。
 
 | ADR | 原问题 / 决定 | 影响与代价 |
 |---|---|---|

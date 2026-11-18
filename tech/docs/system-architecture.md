@@ -2,7 +2,7 @@
 
 > 合并自 `docs/architecture/` 下 15 篇设计文档（系统架构、模块设计、领域模型、规格模型、任务分解、
 > 编排引擎、校验协议、PM Agent、接口规范、数据库、状态管理、多 Agent、通信、P2 扩展）
-> 日期 2026-11-15。契约协作见 [工程组织与契约管理](../../docs/development/PROJECT_STRUCTURE.md)。
+> 更新于 2026-11-18。契约协作见 [工程组织与契约管理](../../docs/development/PROJECT_STRUCTURE.md)。
 >
 > 本文描述"应该怎样"，不等于"已经跑通"。真实实现状态集中在第 14 节。
 
@@ -113,17 +113,17 @@ Validation / Orchestration 不导入 FastAPI、ORM 或 LLM SDK。
 
 | 数据流节点 | 契约模型 | Schema 文件 | 当前状态 |
 |---|---|---|---|
-| Design Spec 表单或 JSON → 标准化 | `DesignSpecContent` | `design-spec.schema.json` | 前端分支已实现本地表单与 JSON 导入；正式版本待接口 |
-| 保存 SpecRevision | `SpecRevision` | `spec-revision.schema.json` | 契约完成，落库未实现（E/T02） |
-| PM Agent 生成 TaskProposal | `TaskProposal` | `task-proposal.schema.json` | 契约 + 样例完成，Agent 未实现（C/T04） |
-| 规划运行与失败 | `PlanningRun`、`PlanningRunCreated`、`ErrorEnvelope` | `planning-run.schema.json`、`planning-run-created.schema.json`、`error-envelope.schema.json` | 契约 + 样例完成，运行未实现（E/T02） |
-| Schema / 引用 / DAG 校验 | `ValidationReport` | `validation-report.schema.json` | 前端分支已有本地预检和拓扑批次；T05 服务端待实现 |
-| Orchestrator 拓扑批次 | `PlanDerivation` | `plan-derivation.schema.json` | 前端分支已有本地预检和拓扑批次；T05 服务端待实现 |
-| 保存 PlanRevision | `PlanRevision` | `plan-revision.schema.json` | 契约完成，CAS 落库未实现（E/T07） |
-| 布局与视口 | `Layout` | `layout.schema.json` | 契约完成，接口未实现（E/T07） |
-| 历史导出 | `ExportBundle` | `export-bundle.schema.json` | 契约完成，接口未实现（E/T07） |
-| 规划参数 | `PlanningPolicy` | `planning-policy.schema.json` | 契约完成，读取未实现（C/T04） |
-| 项目容器 | `Project` | `project.schema.json` | 契约完成，CRUD 未实现（E/T02） |
+| Design Spec 表单或 JSON → 标准化 | `DesignSpecContent` | `design-spec.schema.json` | 前端入口、API 校验和 SpecRevision 保存已实现 |
+| 保存 SpecRevision | `SpecRevision` | `spec-revision.schema.json` | SQLite 不可变版本、CAS 与幂等已实现 |
+| PM Agent 生成 TaskProposal | `TaskProposal` | `task-proposal.schema.json` | DeepSeek REAL、显式 TEST fixture、预算与修复已实现 |
+| 规划运行与失败 | `PlanningRun`、`PlanningRunCreated`、`ErrorEnvelope` | `planning-run.schema.json`、`planning-run-created.schema.json`、`error-envelope.schema.json` | 路由、队列、轮询、失败与重启恢复已实现 |
+| Schema / 引用 / DAG 校验 | `ValidationReport` | `validation-report.schema.json` | 前后端共用规则，T05 服务端实现与坏图验收通过 |
+| Orchestrator 拓扑批次 | `PlanDerivation` | `plan-derivation.schema.json` | T05 纯函数与 HTTP 编排已实现，Q02 实测通过 |
+| 保存 PlanRevision | `PlanRevision` | `plan-revision.schema.json` | CAS、事务、来源和假设确认已实现 |
+| 布局与视口 | `Layout` | `layout.schema.json` | 独立 revision、读取、PUT 与 409 冲突已实现 |
+| 历史导出 | `ExportBundle` | `export-bundle.schema.json` | JSON 快照、规格和 policy 导出已实现 |
+| 规划参数 | `PlanningPolicy` | `planning-policy.schema.json` | 参数解析、快照与规则应用已实现 |
+| 项目容器 | `Project` | `project.schema.json` | 创建、分页读取与项目隔离已实现 |
 
 接口层同一份契约导出为 `artifacts/openapi.json`（OpenAPI 3.1.0，6 个 tag、18 个操作、60 个组件），
 引用无悬空、无未使用组件。
@@ -523,7 +523,7 @@ P0 直接 Provider+Pydantic；LangChain 为需要多模型兼容时的备选，�
 ### 10.1 通用协议
 
 前缀 `/api/v1`；JSON UTF-8；最大请求 1 MiB。下表已实现为可执行契约（`tech/artifacts/openapi.json`），
-HTTP 路由本身仍待 T02 实现。
+FastAPI 路由、事务/CAS、幂等和错误信封均已接入，并由运行时 OpenAPI 漂移检查守卫。
 
 UUID 路径必须合法，版本整数 ≥1；分页 limit 默认 20 / max 100，cursor 不透明；未知字段 422。
 
@@ -827,32 +827,31 @@ python tech/scripts/export_contracts.py --check
 - 阶段迁移合法性、必需类别、孤立任务；
 - 语义质量（是否真正实现需求）与关键缺失判断。
 
-### 14.5 浏览器交付与待联调项
+### 14.5 P0 交付与联调结果
 
-前端分支支持手动或导入 TaskProposal，浏览器进行覆盖、依赖、关键假设等预检并生成拓扑批次。规格、草稿及历史快照可保存到浏览器。会议室预约是显式 PRESET，正式 PlanningRun 仍由后端提供。当前前端证据见[实现审计](../../docs/PROJECT_AUDIT.md)。
+前端支持手动或导入 TaskProposal、浏览器预检和拓扑批次，并已接入后端 PlanningRun、计划版本、布局和 ExportBundle。会议室预约仍是显式 PRESET，不参与默认规划。当前证据见[实现审计](../../docs/PROJECT_AUDIT.md)。
 
-- **已完成**：契约与生成物、契约测试（含"文档端点表 == OpenAPI 端点"的自动比对）、`ErrorEnvelope` 结构；
-  T05 确定性编排器纯函数模块（`backend/flowstudio_orchestration/`，53 项 unittest，见第 7、8 节）。
-- **未完成**：FastAPI 路由（含 `/orchestrations`、`/workflow-validations` 接线）、事务/CAS 落库、
-  幂等键存储、Host/Origin 校验、静态前端托管、PM Agent 实现。
-- **约定**：T02 落地后必须用真实 `app.openapi()` 与 `tech/artifacts/openapi.json` 比对，
-  差异以契约为准修改路由；不得反过来手改该产物。
+- **已完成**：契约与生成物、18 个 API 操作、SQLite/Alembic、事务/CAS/幂等、
+  Host/Origin 校验、静态前端托管、PM REAL/TEST、计划版本与导出。
+- **跨模块验收**：P0 HTTP、真实进程重启、浏览器同源联调、真实模型和 B/C/D/E/F 的接口闭环均通过。
+- **质量测量**：Q01–Q08 已完成，报告见 `docs/testing/QUALITY_ACCEPTANCE_REPORT.md`。
+- **约定**：`backend/tools/export_openapi.py` 持续比对 FastAPI 与操作表；契约变更仍必须改模型后重新生成产物。
 
 ### 14.6 已验证与已知限制
 
-已验证（2026-11-15，Windows，Python 3.14.2 / pydantic 2.13.5 / jsonschema 4.26.0）：
+已验证（2026-11-18，Windows 11，Python 3.13.5 / pydantic 2.13.5 / Node.js 26.13.0）：
 
-- 25 个产物与模型零漂移；全部 Schema 通过 Draft 2020-12 元校验；9 个样例同时通过 JSON Schema 与模型校验。
-- OpenAPI 14 条路径 / 18 个操作与本文第 10.2 节端点表一致（测试自动比对）。
-- 生成的 TS 通过 Node 22 `--experimental-strip-types --check` 语法检查。
+- 25 个产物与模型零漂移，OpenAPI 18 个操作与 FastAPI 一致。
+- 后端 197 项通过、1 项 REAL 守卫测试跳过，T05 另有 53 项通过。
+- 前端构建、浏览器、真实 HTTP、P0 重启、REAL/变异和质量基准均通过。
 
 限制：
 
 1. **JSON Schema 是投影，Pydantic 是权威**：受限键字典（如 `Layout.positions`）导出为 `patternProperties`，
    未附 `additionalProperties: false`；数组内唯一性、跨字段不变量只在 Pydantic 中生效。
-2. **OpenAPI 由 operation 表生成，尚未由 FastAPI 反向导出**：T02 落地路由后必须用真实 `app.openapi()`
-   与 `tech/artifacts/openapi.json` 比对，差异以契约为准修改路由。
-3. 契约层不含 HTTP 服务、数据库与模型调用；T01 交付物不宣称"已有可运行 API"。
+2. **OpenAPI 由 operation 表生成**：FastAPI 的实际 `app.openapi()` 由 `backend/tools/export_openapi.py`
+   与操作表比对；差异以契约为准修改路由。
+3. 契约层本身仍不含 HTTP 服务、数据库与模型调用；可运行 API 由 backend 组合根连接。
 4. `format: date-time`/`uuid` 只做注解，跨语言校验需各自实现（Pydantic 侧已强制）。
 
 ---

@@ -49,3 +49,8 @@ FLOWSTUDIO_MODEL_ALLOWLIST=deepseek-flash
 新建项目，填写或导入设计规格并保存规格版本。在「后端工作区」选择 **「真实模型」→「发起规划」**。规划成功后，审核并应用候选任务，再进行编排。若只想测试提交和轮询，可用 **「测试样例」→ `diamond`**，此样例要求规格包含需求 ID `R1` 和 `R2`。
 
 更多说明见 [前端使用指南](frontend/README.md) 和 [Windows 本地部署](docs/development/LOCAL_DEPLOYMENT.md)。
+
+## 交付材料
+
+P0 交付范围、复现命令、证据和剩余风险见 [交付报告](delivery/DELIVERY_REPORT.md)；
+机器可读版本与输入清单见 [MANIFEST](delivery/MANIFEST.json)。
