@@ -44,6 +44,7 @@ from flowstudio_contracts.workflow import (
 
 from ..errors import not_found, revision_conflict
 from ..ids import decode_cursor, encode_cursor, new_id, to_iso
+from ..providers.fixtures import normalize_fixture_proposal
 from .tables import (
     CommandRow,
     LayoutRow,
@@ -254,17 +255,32 @@ def _run_error(raw: dict[str, Any]) -> RunError:
 
 
 def planning_run_model(row: PlanningRunRow) -> PlanningRun:
+    mode = PlanningMode(row.mode)
+    status = PlanningStatus(row.status)
+    proposal = TaskProposal.model_validate(load(row.proposal_json)) if row.proposal_json else None
+    error = _run_error(load(row.error_json)) if row.error_json else None
+    # 兼容旧版 TEST 已落库的 critical-only 记录；轮询不回写历史数据。
+    if (
+        mode is PlanningMode.TEST
+        and status is PlanningStatus.NEEDS_INPUT
+        and proposal is not None
+        and not proposal.blocking_questions
+        and proposal.critical_assumption_ids
+    ):
+        proposal, error = normalize_fixture_proposal(proposal)
+        if error is not None:
+            status = PlanningStatus.FAILED
     return PlanningRun(
         id=row.id,
         spec_revision_id=row.spec_revision_id,
-        mode=PlanningMode(row.mode),
-        status=PlanningStatus(row.status),
+        mode=mode,
+        status=status,
         config_snapshot=PlanningConfig.model_validate(load(row.config_json)),
         attempt_count=row.attempt_count,
         fixture_id=row.fixture_id,
         usage=TokenUsage.model_validate(load(row.usage_json)) if row.usage_json else None,
-        error=_run_error(load(row.error_json)) if row.error_json else None,
-        proposal=TaskProposal.model_validate(load(row.proposal_json)) if row.proposal_json else None,
+        error=error,
+        proposal=proposal,
         validation_report=ValidationReport.model_validate(load(row.report_json))
         if row.report_json
         else None,

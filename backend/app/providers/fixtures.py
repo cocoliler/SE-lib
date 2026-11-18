@@ -12,16 +12,29 @@ from pathlib import Path
 from flowstudio_contracts import (
     PlanningConfig,
     PlanningMode,
+    RunError,
     SpecRevision,
     TaskProposal,
     sha256_hex,
 )
+from flowstudio_contracts.codes import RETRYABLE_RUN_FAILURES
+from flowstudio_pm.parser import ProposalError, with_blocking_questions
 
 from .base import AttemptRecord, PlanningOutcome
 
 
 class FixtureNotFound(Exception):
     pass
+
+
+def normalize_fixture_proposal(proposal: TaskProposal) -> tuple[TaskProposal | None, RunError | None]:
+    """TEST 与 REAL 复用同一关键假设问句规则；达到契约容量时返回可读取的失败。"""
+    if not proposal.critical_assumption_ids:
+        return proposal, None
+    try:
+        return with_blocking_questions(proposal), None
+    except ProposalError as exc:
+        return None, RunError(code=exc.code, message=str(exc), retryable=exc.code in RETRYABLE_RUN_FAILURES)
 
 
 class FixtureEngine:
@@ -57,14 +70,17 @@ class FixtureEngine:
                 "config": config.model_dump(mode="json", by_alias=True),
             }
         )
+        candidate, error = normalize_fixture_proposal(proposal)
         return PlanningOutcome(
-            proposal=proposal,
+            proposal=candidate,
+            error=error,
             attempts=[
                 AttemptRecord(
                     attempt_no=1,
                     request_hash=request_hash,
                     response=proposal.model_dump(mode="json", by_alias=True),
                     usage={"total_tokens": 0},
+                    error={"code": error.code.value} if error else None,
                 )
             ],
         )
