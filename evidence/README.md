@@ -11,6 +11,7 @@ Each run contains:
 - `runtime/`: isolated SQLite data used by the HTTP test
 - `browser-*.png`: specification, workflow and dark-theme UI evidence
 - `p0-state.json`: IDs and hashes used to verify restart persistence
+- `real-acceptance*.json`: REAL run, usage, timing, proposal and review evidence
 
 Do not place API keys, `.env` files, user documents or downloaded evidence in this directory.
 The summary intentionally records TEST-only execution; REAL acceptance must be recorded
