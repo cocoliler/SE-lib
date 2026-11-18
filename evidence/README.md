@@ -9,6 +9,8 @@ Each run contains:
 - `summary.json`: machine-readable execution record
 - `logs/`: raw command, backend and browser logs
 - `runtime/`: isolated SQLite data used by the HTTP test
+- `browser-*.png`: specification, workflow and dark-theme UI evidence
+- `p0-state.json`: IDs and hashes used to verify restart persistence
 
 Do not place API keys, `.env` files, user documents or downloaded evidence in this directory.
 The summary intentionally records TEST-only execution; REAL acceptance must be recorded

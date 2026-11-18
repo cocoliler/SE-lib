@@ -57,6 +57,7 @@ FlowStudio 是通用可定制的智能软件工程工作流平台。当前已有
 ### 测试与验证
 
 - [验收执行基线](testing/ACCEPTANCE_BASELINE.md)
+- [P0 技术闭环报告](testing/P0_CLOSURE_REPORT.md)
 - [通用验收标准](testing/ACCEPTANCE_TESTS.md)
 - [质量属性与测量目标](testing/QUALITY_ATTRIBUTES.md)
 - [通用测试策略](testing/TEST_STRATEGY.md)

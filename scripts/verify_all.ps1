@@ -19,11 +19,12 @@ $runRoot = Join-Path $repoRoot "evidence\runs\$runStamp"
 $logsRoot = Join-Path $runRoot "logs"
 $pytestTemp = Join-Path $runRoot "pytest-temp"
 $runtimeRoot = Join-Path $runRoot "runtime"
+$p0StateFile = Join-Path $runRoot "p0-state.json"
 
 New-Item -ItemType Directory -Force -Path $logsRoot, $runtimeRoot | Out-Null
 
 $steps = [System.Collections.Generic.List[object]]::new()
-$serverProcess = $null
+$script:serverProcess = $null
 $overall = "PASS"
 $failure = $null
 $startedAt = Get-Date
@@ -149,11 +150,14 @@ function Invoke-LoggedStep {
 }
 
 function Wait-ForBackend {
-    param([int]$TimeoutSeconds = 30)
+    param(
+        [int]$TimeoutSeconds = 30,
+        [string]$LogPrefix = "server"
+    )
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     while ((Get-Date) -lt $deadline) {
-        if ($serverProcess.HasExited) {
-            throw "Backend exited before becoming ready. See logs/server-stderr.log."
+        if ($script:serverProcess.HasExited) {
+            throw "Backend exited before becoming ready. See logs/$LogPrefix-stderr.log."
         }
         try {
             $response = Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 `
@@ -167,6 +171,37 @@ function Wait-ForBackend {
         }
     }
     throw "Backend did not become ready within $TimeoutSeconds seconds."
+}
+
+function Start-TestServer {
+    param([string]$LogPrefix = "server")
+
+    $env:FLOWSTUDIO_DATA_DIR = $runtimeRoot
+    $env:FLOWSTUDIO_USE_ALEMBIC = "1"
+    $env:FLOWSTUDIO_INSTANCE_LOCK = "1"
+    $env:FLOWSTUDIO_WORKER_MODE = "thread"
+    $env:FLOWSTUDIO_FRONTEND_DIST = (Join-Path $frontendRoot "dist")
+    $env:FLOWSTUDIO_ALLOWED_ORIGINS = "http://127.0.0.1:$Port"
+
+    $serverStdout = Join-Path $logsRoot "$LogPrefix-stdout.log"
+    $serverStderr = Join-Path $logsRoot "$LogPrefix-stderr.log"
+    $script:serverProcess = Start-Process `
+        -FilePath $Python `
+        -ArgumentList @("-B", "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "$Port") `
+        -WorkingDirectory $backendRoot `
+        -WindowStyle Hidden `
+        -RedirectStandardOutput $serverStdout `
+        -RedirectStandardError $serverStderr `
+        -PassThru
+    Wait-ForBackend -LogPrefix $LogPrefix
+}
+
+function Stop-TestServer {
+    if ($null -ne $script:serverProcess -and -not $script:serverProcess.HasExited) {
+        Stop-Process -Id $script:serverProcess.Id -Force
+        Wait-Process -Id $script:serverProcess.Id -Timeout 10 -ErrorAction SilentlyContinue
+    }
+    $script:serverProcess = $null
 }
 
 try {
@@ -225,30 +260,16 @@ try {
     }
 
     if (-not $SkipBrowser) {
+        $env:FLOWSTUDIO_SPEC_SCREENSHOT = Join-Path $runRoot "browser-spec.png"
+        $env:FLOWSTUDIO_SCREENSHOT = Join-Path $runRoot "browser-workflow.png"
+        $env:FLOWSTUDIO_DARK_SCREENSHOT = Join-Path $runRoot "browser-dark.png"
         Invoke-LoggedStep -Name "browser-standalone" -WorkingDirectory $frontendRoot -Command {
             & $npmCommand run test:browser
         }
     }
 
     if (-not $SkipHttp) {
-        $env:FLOWSTUDIO_DATA_DIR = $runtimeRoot
-        $env:FLOWSTUDIO_USE_ALEMBIC = "1"
-        $env:FLOWSTUDIO_INSTANCE_LOCK = "1"
-        $env:FLOWSTUDIO_WORKER_MODE = "thread"
-        $env:FLOWSTUDIO_FRONTEND_DIST = (Join-Path $frontendRoot "dist")
-        $env:FLOWSTUDIO_ALLOWED_ORIGINS = "http://127.0.0.1:$Port"
-
-        $serverStdout = Join-Path $logsRoot "server-stdout.log"
-        $serverStderr = Join-Path $logsRoot "server-stderr.log"
-        $serverProcess = Start-Process `
-            -FilePath $Python `
-            -ArgumentList @("-B", "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "$Port") `
-            -WorkingDirectory $backendRoot `
-            -WindowStyle Hidden `
-            -RedirectStandardOutput $serverStdout `
-            -RedirectStandardError $serverStderr `
-            -PassThru
-        Wait-ForBackend
+        Start-TestServer
 
         if (-not $SkipBrowser) {
             $env:FLOWSTUDIO_TEST_BACKEND_URL = "http://127.0.0.1:$Port"
@@ -261,6 +282,21 @@ try {
         Invoke-LoggedStep -Name "http-e2e-test" -WorkingDirectory $backendRoot -Command {
             & $Python -B scripts\e2e_smoke.py --base-url "http://127.0.0.1:$Port"
         }
+        Invoke-LoggedStep -Name "p0-http-acceptance" -WorkingDirectory $backendRoot -Command {
+            & $Python -B scripts\p0_acceptance.py `
+                --base-url "http://127.0.0.1:$Port" `
+                --state-file $p0StateFile `
+                --phase full
+        }
+
+        Stop-TestServer
+        Start-TestServer -LogPrefix "server-restart"
+        Invoke-LoggedStep -Name "restart-verify" -WorkingDirectory $backendRoot -Command {
+            & $Python -B scripts\p0_acceptance.py `
+                --base-url "http://127.0.0.1:$Port" `
+                --state-file $p0StateFile `
+                --phase verify
+        }
     }
 
     Write-Host ""
@@ -272,10 +308,7 @@ catch {
     Write-Host "FAILED: $failure" -ForegroundColor Red
 }
 finally {
-    if ($null -ne $serverProcess -and -not $serverProcess.HasExited) {
-        Stop-Process -Id $serverProcess.Id -Force
-        Wait-Process -Id $serverProcess.Id -Timeout 10 -ErrorAction SilentlyContinue
-    }
+    Stop-TestServer
     try {
         Write-Summary
     }
