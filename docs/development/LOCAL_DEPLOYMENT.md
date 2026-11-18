@@ -67,6 +67,14 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify_all.ps1
 
 脚本会执行后端测试、T05、契约与 OpenAPI 检查、前端构建、领域测试、浏览器回归，并自动启动同源后端完成浏览器联调、P0 HTTP 验收和 HTTP 端到端测试。P0 验收还会实际停止并重启后端，比较规格、计划、布局和导出 hash。结果写入 `evidence/runs/<timestamp>/summary.md`、原始 `logs/` 和浏览器截图。可使用 `-SkipBrowser` 或 `-SkipHttp` 跳过当前机器不可用的层；REAL 验收始终独立执行，不由该脚本伪造。
 
+质量属性测量使用 `-Quality` 启用：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify_all.ps1 -Quality
+```
+
+该模式会增加 100 任务/1000 边编排基准、100 任务持久化基准、事务失败注入、100 任务/200 边画布性能、键盘焦点和主题对比度测量。
+
 REAL 验收在配置服务端密钥和明确用户规格后，从 `backend` 目录单独运行：
 
 ```powershell

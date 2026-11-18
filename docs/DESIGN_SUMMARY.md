@@ -16,4 +16,4 @@ FlowStudio 面向需求结构化、计划编排、开发执行、验证与反馈
 - 通过校验并完成假设确认后可保存不可变 PlanRevision，写入用 expected_revision 与幂等键处理冲突及重试。
 - 任务规划、计划保存和实际执行分开。P2 再引入执行、成果验证与监督。
 
-下一步把现有本地前端与 T02 项目/规格 API、T04 PM、T05 服务端编排器联调，再完成 T07 正式版本与 T08 REAL 验收。参见[实现审计](PROJECT_AUDIT.md)、[工作流编辑器](design/WORKFLOW_EDITOR.md)、[技术版系统架构](../tech/docs/system-architecture.md)和[开发路线](development/ROADMAP.md)。
+当前 T02/T07 的项目、规格、计划、布局和导出 API 已接入；T04 REAL、T05 服务端编排、浏览器联调、P0 验收及 Q01–Q08 测量均已完成。后续 P2 再引入实际执行、成果验证与监督。参见[实现审计](PROJECT_AUDIT.md)、[REAL 验收报告](testing/REAL_ACCEPTANCE_REPORT.md)、[质量报告](testing/QUALITY_ACCEPTANCE_REPORT.md)和[开发路线](development/ROADMAP.md)。

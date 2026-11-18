@@ -5,6 +5,7 @@ param(
     [switch]$Bootstrap,
     [switch]$SkipBrowser,
     [switch]$SkipHttp,
+    [switch]$Quality,
     [int]$Port = 8765
 )
 
@@ -252,11 +253,24 @@ try {
     Invoke-LoggedStep -Name "openapi-drift" -WorkingDirectory $repoRoot -Command {
         & $Python -B backend\tools\export_openapi.py
     }
+    if ($Quality) {
+        Invoke-LoggedStep -Name "quality-python" -WorkingDirectory $repoRoot -Command {
+            & $Python -B backend\scripts\quality_acceptance.py `
+                --output (Join-Path $runRoot "quality-python.json")
+        }
+    }
     Invoke-LoggedStep -Name "frontend-build" -WorkingDirectory $frontendRoot -Command {
         & $npmCommand run build
     }
     Invoke-LoggedStep -Name "frontend-domain" -WorkingDirectory $frontendRoot -Command {
         & $npmCommand test
+    }
+
+    if ($Quality -and -not $SkipBrowser) {
+        $env:FLOWSTUDIO_PERF_OUTPUT = Join-Path $runRoot "quality-browser.json"
+        Invoke-LoggedStep -Name "quality-browser" -WorkingDirectory $frontendRoot -Command {
+            & $npmCommand run test:performance
+        }
     }
 
     if (-not $SkipBrowser) {

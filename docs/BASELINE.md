@@ -1,6 +1,6 @@
 # FlowStudio 设计基线 v3.1
 
-更新于 2026-11-16。仓库当前交付统一契约、可独立保存草稿的浏览器工作台，以及服务端规划与计划版本。实现和验证入口见[实现审计](PROJECT_AUDIT.md)。
+更新于 2026-11-18。仓库当前交付统一契约、浏览器工作台、服务端规划与计划版本，并完成 P0、REAL、人工语义评审和 Q01–Q08 质量验收。实现和验证入口见[实现审计](PROJECT_AUDIT.md)。
 
 FlowStudio 是通用可定制的智能软件工程工作流平台（Configurable AI-Powered Software Engineering Workflow Platform）。课堂作业 2 的完整目标是 **Design Spec → PM Agent → Task Decomposition → Orchestrator → Workflow Visualization**。产品后续扩展到实际执行、监督、验证和反馈。
 

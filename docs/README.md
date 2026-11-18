@@ -1,6 +1,6 @@
 # FlowStudio 通用设计文档 v3.1
 
-FlowStudio 是通用可定制的智能软件工程工作流平台。当前已有统一契约与可独立运行的浏览器前端，正式规划闭环待联调。分支状态、可运行范围和测试证据见[实现审计](PROJECT_AUDIT.md)。
+FlowStudio 是通用可定制的智能软件工程工作流平台。当前 P0 闭环、REAL 验收、人工语义评审和 Q01–Q08 质量测量均已完成；P2 执行与监督仍为后续范围。分支状态、可运行范围和测试证据见[实现审计](PROJECT_AUDIT.md)。
 
 优先阅读：[设计摘要](DESIGN_SUMMARY.md) → [基线](BASELINE.md) → [技术版系统架构](../tech/docs/system-architecture.md) → [评审](DESIGN_REVIEW.md)。
 
@@ -59,6 +59,7 @@ FlowStudio 是通用可定制的智能软件工程工作流平台。当前已有
 - [验收执行基线](testing/ACCEPTANCE_BASELINE.md)
 - [P0 技术闭环报告](testing/P0_CLOSURE_REPORT.md)
 - [REAL 验收报告](testing/REAL_ACCEPTANCE_REPORT.md)
+- [质量属性验收报告](testing/QUALITY_ACCEPTANCE_REPORT.md)
 - [通用验收标准](testing/ACCEPTANCE_TESTS.md)
 - [质量属性与测量目标](testing/QUALITY_ATTRIBUTES.md)
 - [通用测试策略](testing/TEST_STRATEGY.md)
