@@ -1,0 +1,37 @@
+{
+  "schema_version": "1.0",
+  "product": "FlowStudio",
+  "delivery_scope": "P0",
+  "delivery_date": "2026-11-18",
+  "source_branch": "feature/f/T08-acceptance",
+  "source_baseline": "1a7feef",
+  "authoritative_documents": [
+    "docs/product/REQUIREMENTS.md",
+    "docs/product/REQUIREMENTS_TRACEABILITY.md",
+    "docs/testing/ACCEPTANCE_TESTS.md",
+    "docs/testing/QUALITY_ATTRIBUTES.md"
+  ],
+  "reference_inputs": [
+    {
+      "path": "delivery/inputs/campus-meeting-spec.json",
+      "purpose": "REAL acceptance reference input; not a default product preset",
+      "original_raw_sha256": "021495cc216a706f0d79a0d9ce1d6ddfd1d309b3205a9a01fbc62727af93f1bb",
+      "repository_raw_sha256": "76616b4d9688dc3b37bee421cb3a2460528c6f9ca203485f49324339c515c31f",
+      "canonical_content_sha256": "66912432ab4f35b338e2b8c06a582722bd920a796879974195206f3ceae60691"
+    }
+  ],
+  "verification": {
+    "unified_entry": "scripts/verify_all.ps1",
+    "quality_switch": "-Quality",
+    "real_entry": "backend/scripts/real_acceptance.py",
+    "evidence_run": "evidence/runs/20261118-155653",
+    "github_actions_template": "delivery/github-actions-verify.yml.example"
+  },
+  "status": {
+    "p0": "PASS",
+    "real": "PASS",
+    "human_semantic_review": "PASS",
+    "quality": "PASS",
+    "team_merge": "PENDING"
+  }
+}

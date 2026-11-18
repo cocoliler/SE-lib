@@ -82,3 +82,11 @@ python scripts\real_acceptance.py --base-url http://127.0.0.1:8000 --spec <设�
 ```
 
 该命令会执行 baseline、单项需求变化和 `standard → coarse` 粒度变化，记录模型、attempt、usage、耗时、候选和 must 需求映射；A05 人工签字不会由脚本伪造。
+
+生成只包含 Git 跟踪源码的交付包，以及最近一次验收的脱敏日志/截图/测量证据：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_delivery.ps1
+```
+
+产物位于 `evidence/delivery/`，包含源码 ZIP、证据 ZIP 和 SHA-256 清单。
