@@ -1,4 +1,4 @@
-import { cloneElement, useId, useState, type ReactElement } from 'react';
+import { cloneElement, useEffect, useId, useRef, useState, type ReactElement } from 'react';
 import { validatePlanStructure, type Issue, type Requirement, type Spec, type Task } from './plan';
 
 export function Field({ label, children, error }: {
@@ -141,15 +141,18 @@ export function SpecEditor({ spec, issues, setSpec }: { spec: Spec; issues: Issu
 }
 
 const advancedFields = ['inputs', 'assumptions', 'estimated_effort'] as const;
-function AdvancedTask({ task, patch, readonly }: {
+function AdvancedTask({ task, patch, readonly, buffer, setBuffer, issue }: {
   task: Task; patch(value: Partial<Task>): void; readonly: boolean;
+  buffer: string | null; setBuffer(value: string | null): void; issue?: string;
 }) {
   const value = Object.fromEntries(advancedFields.map((field) => [field, task[field]]));
-  const [buffer, setBuffer] = useState<string | null>(null);
   const [error, setError] = useState('');
   return <details><summary>输入绑定、假设与工时</summary>
-    <Field label="高级字段 JSON"><textarea rows={8} spellCheck={false} readOnly={readonly}
-      value={buffer ?? JSON.stringify(value, null, 2)} onChange={(event) => setBuffer(event.target.value)} /></Field>
+    <Field label="高级字段 JSON" error={error || issue}><textarea rows={8} spellCheck={false} readOnly={readonly}
+      value={buffer ?? JSON.stringify(value, null, 2)} onChange={(event) => {
+        setBuffer(event.target.value);
+        setError('');
+      }} /></Field>
     {!readonly && <button disabled={buffer === null} onClick={() => {
       try {
         const candidate = JSON.parse(buffer ?? '');
@@ -163,28 +166,152 @@ function AdvancedTask({ task, patch, readonly }: {
         setError('');
       } catch (err) { setError(err instanceof Error ? err.message : '无法读取高级字段'); }
     }}>应用高级字段</button>}
-    {error && <p role="alert" className="error">{error}</p>}
   </details>;
 }
 
-export function TaskEditor({ task, tasks, readonly, patch, connect, disconnect, remove, close }: {
-  task: Task; tasks: Task[]; readonly: boolean; patch(value: Partial<Task>): void;
-  connect(source: string): void; disconnect(source: string): void; remove(): void; close(): void;
+const taskSuggestions = {
+  category: ['design', 'development', 'build', 'integration', 'testing', 'verify', 'documentation', 'deployment'],
+  stage: ['design', 'foundation', 'build', 'integration', 'verify', 'acceptance', 'release'],
+  assigned_role: ['analyst', 'architect', 'developer', 'frontend_engineer', 'backend_engineer', 'tester', 'qa', 'devops'],
+} satisfies Partial<Record<keyof Task, string[]>>;
+
+function TaskOptionField({ label, value, options, error, onChange }: {
+  label: string; value: string; options: string[]; error?: string; onChange(value: string): void;
+}) {
+  const [menu, setMenu] = useState<'all' | 'matches' | null>(null);
+  const [active, setActive] = useState(-1);
+  const input = useRef<HTMLInputElement>(null);
+  const list = useRef<HTMLUListElement>(null);
+  const listId = useId();
+  const query = value.trim().toLowerCase();
+  const suggestions = menu === 'matches'
+    ? options.filter((option) => option.toLowerCase().startsWith(query))
+    : options;
+  const open = menu !== null && suggestions.length > 0;
+
+  useEffect(() => {
+    if (open && active >= 0) list.current?.children[active]?.scrollIntoView({ block: 'nearest' });
+  }, [open, active]);
+
+  function choose(next: string) {
+    onChange(next);
+    setMenu(null);
+    input.current?.focus();
+  }
+
+  return <div className="task-option-field" onBlur={(event) => {
+    if (!event.currentTarget.contains(event.relatedTarget)) setMenu(null);
+  }}>
+    <Field label={label} error={error}>
+      <input ref={input} value={value} role="combobox" aria-autocomplete="list"
+        aria-expanded={open} aria-controls={listId} autoComplete="off"
+        aria-activedescendant={open && active >= 0 ? listId + '-' + active : undefined}
+        onChange={(event) => {
+          const next = event.target.value;
+          setActive(-1);
+          setMenu(next.trim() ? 'matches' : null);
+          onChange(next);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            const step = event.key === 'ArrowDown' ? 1 : -1;
+            const count = open ? suggestions.length : options.length;
+            setActive(open && active >= 0 ? (active + step + count) % count
+              : step > 0 ? 0 : count - 1);
+            if (!open) setMenu('all');
+          } else if (open && event.key === 'Enter' && active >= 0) {
+            event.preventDefault();
+            choose(suggestions[active]);
+          } else if (open && event.key === 'Escape') {
+            event.stopPropagation();
+            setMenu(null);
+          }
+        }} />
+    </Field>
+    <button className="task-option-toggle" aria-label={'展开' + label + '选项'}
+      aria-expanded={open} aria-controls={listId}
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={() => {
+        input.current?.focus();
+        setActive(options.indexOf(value));
+        setMenu(menu === 'all' ? null : 'all');
+      }}><span className="project-chevron" aria-hidden="true" /></button>
+    <ul id={listId} ref={list} role="listbox" aria-label={label + '选项'} hidden={!open} className="task-option-list">
+      {suggestions.map((option, index) => <li key={option} id={listId + '-' + index} role="option"
+        aria-selected={value === option} data-highlighted={active === index}
+        onMouseDown={(event) => event.preventDefault()} onClick={() => choose(option)}>{option}</li>)}
+    </ul>
+  </div>;
+}
+
+export function TaskEditor({ task, tasks, readonly, issues, patch, connect, disconnect, remove, close, confirm }: {
+  task: Task; tasks: Task[]; readonly: boolean; issues: Issue[]; patch(value: Partial<Task>): void;
+  connect(source: string): void; disconnect(source: string): void; remove(): void; close(): void; confirm(): void;
 }) {
   const [upstream, setUpstream] = useState('');
+  const [validationAttempt, setValidationAttempt] = useState(0);
+  const [advancedDraft, setAdvancedDraft] = useState<string | null>(null);
+  const inspector = useRef<HTMLElement>(null);
   const heading = useId();
-  const fields = [['name', '任务名称'], ['category', '类别'], ['stage', '阶段'], ['assigned_role', '建议角色']] as const;
-  return <aside className="panel inspector" aria-labelledby={heading}>
-    <div className="panel-title"><h2 id={heading}>任务详情</h2><button aria-label="关闭任务详情" onClick={close}>×</button></div>
+  const optionFields = [['category', '类别'], ['stage', '阶段'], ['assigned_role', '建议角色']] as const;
+
+  useEffect(() => {
+    if (!validationAttempt) return;
+    const first = inspector.current?.querySelector<HTMLElement>('[aria-invalid="true"], .task-section-error');
+    if (!first) return;
+    const details = first.closest('details');
+    if (details) details.open = true;
+    first.focus();
+    first.scrollIntoView({ block: 'nearest' });
+  }, [validationAttempt]);
+
+  function fieldError(...paths: string[]) {
+    if (!validationAttempt) return;
+    return issues.find(({ path }) => paths.some((field) => path === field || path.startsWith(field + '/')))?.message;
+  }
+
+  function confirmTask() {
+    if (issues.length || advancedDraft !== null) setValidationAttempt((attempt) => attempt + 1);
+    else confirm();
+  }
+
+  const overviewError = validationAttempt ? issues.find(({ path }) => path === '' || path === '/task_id')?.message : undefined;
+  const deliverablesError = validationAttempt ? issues.find(({ path }) => path === '/deliverables')?.message : undefined;
+  const dependencyError = fieldError('/dependencies');
+  const advancedError = validationAttempt && advancedDraft !== null ? '请先应用高级字段'
+    : fieldError(...advancedFields.map((field) => '/' + field));
+
+  return <aside ref={inspector} className="panel inspector" aria-labelledby={heading}>
+    <div className="panel-title">
+      <h2 id={heading}>任务详情</h2>
+      <div className="actions">
+        {!readonly && <button className="primary" onClick={confirmTask}>确认任务</button>}
+        <button aria-label="关闭任务详情" onClick={close}>×</button>
+      </div>
+    </div>
     <code className="muted">{task.task_id}</code>
+    {overviewError && <p className="spec-error task-section-error" tabIndex={-1}>{overviewError}</p>}
     <fieldset disabled={readonly}>
-      {fields.map(([key, label]) => <Field key={key} label={label}><input value={task[key]}
-        onChange={(event) => patch({ [key]: event.target.value })} /></Field>)}
-      <Field label="任务描述"><textarea rows={3} value={task.description} onChange={(event) => patch({ description: event.target.value })} /></Field>
-      <Field label="优先级"><select value={task.priority} onChange={(event) => patch({ priority: event.target.value as Task['priority'] })}>
+      <Field label="任务名称" error={fieldError('/name')}><input value={task.name}
+        onChange={(event) => patch({ name: event.target.value })} /></Field>
+      {optionFields.map(([key, label]) => {
+        if (readonly) return <Field key={key} label={label}><input value={task[key]} readOnly /></Field>;
+        const options = [...new Set([
+          ...taskSuggestions[key],
+          ...tasks.filter((item) => item.task_id !== task.task_id)
+            .map((item) => item[key].trim())
+            .filter((value) => /^[A-Za-z][A-Za-z0-9_-]*$/.test(value)),
+        ])];
+        return <TaskOptionField key={key} label={label} value={task[key]} options={options}
+          error={fieldError('/' + key)} onChange={(value) => patch({ [key]: value })} />;
+      })}
+      <Field label="任务描述" error={fieldError('/description')}><textarea rows={3} value={task.description} onChange={(event) => patch({ description: event.target.value })} /></Field>
+      <Field label="优先级" error={fieldError('/priority')}><select value={task.priority} onChange={(event) => patch({ priority: event.target.value as Task['priority'] })}>
         <option value="high">高</option><option value="medium">中</option><option value="low">低</option>
       </select></Field>
       <h3>上游依赖</h3>
+      {dependencyError && <p className="spec-error task-section-error" tabIndex={-1}>{dependencyError}</p>}
       <ul className="dependency-list">{task.dependencies.map((id) => <li key={id}>
         <span>{tasks.find((item) => item.task_id === id)?.name || id}</span>
         {!readonly && <button aria-label={'移除依赖 ' + id} onClick={() => disconnect(id)}>移除</button>}
@@ -198,19 +325,20 @@ export function TaskEditor({ task, tasks, readonly, patch, connect, disconnect, 
         <button disabled={!upstream} onClick={() => { connect(upstream); setUpstream(''); }}>添加依赖</button>
       </div>}
       <h3>交付物</h3>
+      {deliverablesError && <p className="spec-error task-section-error" tabIndex={-1}>{deliverablesError}</p>}
       {task.deliverables.map((item, index) => <div key={index} className="deliverable">
-        <Field label="交付 ID"><input value={item.id} onChange={(event) =>
+        <Field label="交付 ID" error={fieldError('/deliverables/' + index + '/id')}><input value={item.id} onChange={(event) =>
           patch({ deliverables: task.deliverables.map((entry, i) => i === index ? { ...entry, id: event.target.value } : entry) })} /></Field>
-        <Field label="交付内容"><input value={item.text} onChange={(event) =>
+        <Field label="交付内容" error={fieldError('/deliverables/' + index + '/text')}><input value={item.text} onChange={(event) =>
           patch({ deliverables: task.deliverables.map((entry, i) => i === index ? { ...entry, text: event.target.value } : entry) })} /></Field>
         {!readonly && <button onClick={() => patch({ deliverables: task.deliverables.filter((_, i) => i !== index) })}>移除交付物</button>}
       </div>)}
       {!readonly && <button onClick={() => patch({ deliverables: [...task.deliverables, { id: 'OUT_' + crypto.randomUUID().slice(0, 8), text: '' }] })}>添加交付物</button>}
-      <Lines label="任务验收标准" value={task.acceptance_criteria} onChange={(value) => patch({ acceptance_criteria: value })} />
-      <Lines label="关联需求 ID" value={task.source_requirement_ids} onChange={(value) => patch({ source_requirement_ids: value })} />
-      <Field label="规划依据"><textarea value={task.rationale} onChange={(event) => patch({ rationale: event.target.value })} /></Field>
+      <Lines label="任务验收标准" error={fieldError('/acceptance_criteria')} value={task.acceptance_criteria} onChange={(value) => patch({ acceptance_criteria: value })} />
+      <Lines label="关联需求 ID" error={fieldError('/source_requirement_ids')} value={task.source_requirement_ids} onChange={(value) => patch({ source_requirement_ids: value })} />
+      <Field label="规划依据" error={fieldError('/rationale')}><textarea value={task.rationale} onChange={(event) => patch({ rationale: event.target.value })} /></Field>
     </fieldset>
-    <AdvancedTask task={task} patch={patch} readonly={readonly} />
+    <AdvancedTask task={task} patch={patch} readonly={readonly} buffer={advancedDraft} setBuffer={setAdvancedDraft} issue={advancedError} />
     {!readonly && <button className="danger" onClick={remove}>删除任务</button>}
   </aside>;
 }

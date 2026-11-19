@@ -225,6 +225,42 @@ tr.selected td { background: var(--hover); }
 .confirm { margin-top: 7px; border-color: var(--danger-border); }
 .inspector fieldset { min-width: 0; padding: 0; margin: 0; border: 0; display: grid; gap: 10px; }
 .inspector > code { overflow-wrap: anywhere; }
+.task-option-field { position: relative; min-width: 0; }
+.task-option-field input { padding-inline-end: 38px; }
+.task-option-toggle {
+  position: absolute;
+  inset-block-start: 25px;
+  inset-inline-end: 2px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.task-option-list {
+  position: absolute;
+  inset-inline: 0;
+  top: 100%;
+  z-index: 5;
+  max-height: 168px;
+  overflow: auto;
+  margin: 2px 0 0;
+  padding: 3px;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: 0 4px 12px #1822301a;
+}
+.task-option-list [role="option"] { padding: 4px 9px; cursor: pointer; overflow-wrap: anywhere; }
+.task-option-list [aria-selected="true"],
+.task-option-list [data-highlighted="true"],
+.task-option-list [role="option"]:hover { background: var(--selection); }
+.inspector [aria-invalid="true"] { border-color: var(--danger); }
+.inspector [aria-invalid="true"]:focus-visible { outline-color: var(--danger); }
+.inspector .task-section-error { border-inline-start: 2px solid var(--danger); padding-inline-start: 8px; }
 .inspector details textarea { font-family: ui-monospace, monospace; }
 .inspector summary { cursor: pointer; }
 .dependency-list { padding: 0; margin: 0; list-style: none; }

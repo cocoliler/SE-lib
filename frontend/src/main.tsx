@@ -313,7 +313,13 @@ function ProjectView({ project, theme, update, removeHistory, notice, sidebar }:
   } : localAssessment;
   const state = planState(plan, assessment, (orchestrated || !!derived) && ready && !!assessment.result, edited);
   const current = state === 'PLAN_VALID' ? assessment.result : undefined;
-  const task = plan.tasks.find((item) => item.task_id === selected);
+  const taskIndex = plan.tasks.findIndex((item) => item.task_id === selected);
+  const task = plan.tasks[taskIndex];
+  const taskIssuePrefix = '/tasks/' + taskIndex;
+  const taskIssues = task ? assessment.issues
+    .filter(({ path }) => path === taskIssuePrefix || path.startsWith(taskIssuePrefix + '/'))
+    .map(({ path, message }) => ({ path: path.slice(taskIssuePrefix.length), message })) : [];
+  const planIssues = assessment.issues.filter(({ path }) => !/^\/tasks\/\d+(\/|$)/.test(path));
   const readonly = !!history;
 
   function navigate(next: typeof tab) {
@@ -523,7 +529,7 @@ function ProjectView({ project, theme, update, removeHistory, notice, sidebar }:
             <Lines label="阻断问题" value={plan.blocking_questions} onChange={(questions) => changePlan((previous) =>
               ({ ...previous, blocking_questions: questions }))} />
           </section>}
-          <Issues issues={assessment.issues} focus={(index) => select(plan.tasks[index]?.task_id ?? null)} />
+          <Issues issues={planIssues} />
           <Issues issues={assessment.warnings} warning />
 
           <div className={'plan-grid' + (task ? ' inspecting' : '') + (view === 'canvas' && showNavigator && plan.tasks.length ? ' with-navigator' : '')}>
@@ -545,14 +551,17 @@ function ProjectView({ project, theme, update, removeHistory, notice, sidebar }:
                 {!readonly && <button className="primary" onClick={addTask}>创建首个任务</button>}
               </Empty>}
             {task && <div className="task-detail-column">
-              <TaskEditor key={task.task_id + (history?.id ?? '')} task={task} tasks={plan.tasks} readonly={readonly}
+              <TaskEditor key={task.task_id + (history?.id ?? '')} task={task} tasks={plan.tasks} readonly={readonly} issues={taskIssues}
                 patch={(fields) => patch(task.task_id, fields)} connect={(upstream) => connect(upstream, task.task_id)}
                 disconnect={(id) => {
                   const linked = task.inputs.filter((input) => input.kind === 'task' && input.task_id === id).length;
                   if (linked && !window.confirm('移除这条依赖将同时移除 ' + linked + ' 个输入绑定，继续？')) return;
                   patch(task.task_id, { dependencies: task.dependencies.filter((item) => item !== id),
                     inputs: task.inputs.filter((input) => input.kind !== 'task' || input.task_id !== id) });
-                }} remove={() => setDeleting(task.task_id)} close={closeDetails} />
+                }} remove={() => setDeleting(task.task_id)} close={closeDetails} confirm={() => {
+                  closeDetails();
+                  notice('任务已确认');
+                }} />
               {deleting === task.task_id && <section className="panel confirm" aria-label="确认删除任务">
                 <p>将移除任务及 {plan.tasks.filter((item) => item.dependencies.includes(task.task_id)).length} 项任务对它的依赖，以及相关输入绑定。</p>
                 <div className="actions"><button className="danger" onClick={() => remove(task.task_id)}>确认删除</button>

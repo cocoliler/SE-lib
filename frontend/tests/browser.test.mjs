@@ -249,8 +249,26 @@ test('浏览器中的空项目、规格、任务、依赖、快照和 PNG', { ti
   await text('暂无任务规划');
   await click('创建首个任务');
   await text('计划有校验问题');
+  assert.equal(await evaluate(() => document.querySelector('.inspector [aria-invalid="true"]')), null);
+  assert.equal(await evaluate(() => document.querySelector('.project-content > .issues')), null);
+  await click('确认任务');
+  await until(() => evaluate(() => document.activeElement.matches('.inspector input[aria-invalid="true"]')), '聚焦首个无效字段');
   await field('任务名称', '手动任务');
-  await field('类别', 'dev');
+  assert.equal(await evaluate(() => document.querySelector('.inspector input').hasAttribute('aria-invalid')), false);
+  await click('展开类别选项');
+  await evaluate(() => [...document.querySelectorAll('.task-option-list:not([hidden]) li')]
+    .find((item) => item.textContent === 'design').click());
+  assert.equal(await evaluate(() => document.querySelector('.task-option-field input').value), 'design');
+  await evaluate(() => { document.querySelectorAll('.task-option-field input')[1].focus(); });
+  await field('阶段', 'a');
+  const matches = await evaluate(() => [...document.querySelectorAll('.task-option-list:not([hidden]) li')]
+    .map((item) => item.textContent));
+  assert.ok(matches.includes('acceptance'));
+  assert.ok(matches.every((option) => option.startsWith('a')));
+  await evaluate(() => { document.querySelector('.task-option-field input').focus(); });
+  await field('类别', 'dev_custom');
+  assert.equal(await evaluate(() => document.querySelector('.task-option-field input').value), 'dev_custom');
+  assert.equal(await evaluate(() => document.querySelector('.task-option-field input').getAttribute('aria-expanded')), 'false');
   await field('阶段', 'build');
   await field('建议角色', 'developer');
   await field('任务描述', '完成工程变更');
@@ -271,6 +289,9 @@ test('浏览器中的空项目、规格、任务、依赖、快照和 PNG', { ti
   await click('导出任务 JSON');
   const planFile = await until(async () => (await readdir(profile)).find((file) => file === 'task-plan.json'), '任务导出文件');
   assert.equal(JSON.parse(await readFile(join(profile, planFile), 'utf8')).tasks[0].name, '已修改任务');
+  await click('确认任务');
+  await text('任务已确认');
+  assert.equal(await evaluate(() => document.querySelector('.inspector')), null);
   await click('导入任务 JSON');
   await uploadText('{"tasks":[],"tasks":[]}', 'duplicate.json');
   await text('JSON 包含重复键："tasks"');
